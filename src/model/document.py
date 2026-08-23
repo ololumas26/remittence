@@ -16,13 +16,6 @@ class DocumentStatus(Enum):
     APPROVED = 'approved'
     REJECTED = 'rejected'
 
-# id, client_id (FK, 1:N),
-# type (enum BI/PASSAPORTE/TITULO_RESIDENCIA/COMPROVATIVO_MORADA),
-# document_number (único), birth_date, expiration_date (fail-fast, não pode estar no passado),
-# is_expired (bool, à parte do status), status (PENDENTE/APROVADO/REJEITADO),
-# file_path,
-# created_at/updated_at. A checagem "pessoal vs morada" e a comparação de birth_date com o Client ficam no service, não no modelo.
-
 
 class Document(SQLModel, table = True):
 
