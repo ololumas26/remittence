@@ -1,0 +1,3 @@
+
+APP_PREFIX = '/api/v1'
+MAJOR_AGE = 18
