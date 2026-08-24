@@ -22,3 +22,6 @@ class FileStorageService:
         self._ensure_has_allowed_extension(filename=file.filename)
         response = await self.supabase_file_storage.upload(file, client_id)
         return response
+
+    def delete_previous(self, file_path : str):
+        self.supabase_file_storage.delete(file_path)

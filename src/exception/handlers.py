@@ -11,6 +11,8 @@ from src.exception.exceptions import (
     InvalidIdentifierError,
     ExpiredDocumentError,
     FileUploadError,
+    DocumentNotEditableError,
+    DocumentNotDeletableError,
 )
 
 
@@ -19,6 +21,8 @@ STATUS_BY_EXCEPTION = {
     UnderageClientError: status.HTTP_400_BAD_REQUEST,
     InvalidIdentifierError: status.HTTP_400_BAD_REQUEST,
     ExpiredDocumentError: status.HTTP_400_BAD_REQUEST,
+    DocumentNotEditableError: status.HTTP_400_BAD_REQUEST,
+    DocumentNotDeletableError: status.HTTP_400_BAD_REQUEST,
     ResourceAlreadyExistsError: status.HTTP_409_CONFLICT,
     ResourceNotFoundError: status.HTTP_404_NOT_FOUND,
     # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.

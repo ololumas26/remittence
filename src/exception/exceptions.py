@@ -30,3 +30,13 @@ class ExpiredDocumentError(AppException):
 class FileUploadError(AppException):
     """Levantada quando o upload de um ficheiro para o storage externo (Supabase) falha."""
     code = "FILE_UPLOAD_FAILED"
+
+
+class DocumentNotEditableError(AppException):
+    """Levantada quando se tenta atualizar um documento que não está expirado nem rejeitado."""
+    code = "DOCUMENT_NOT_EDITABLE"
+
+
+class DocumentNotDeletableError(AppException):
+    """Levantada quando se tenta apagar um documento que já foi avaliado (aprovado ou rejeitado)."""
+    code = "DOCUMENT_NOT_DELETABLE"
