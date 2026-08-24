@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from src.controller.client_controller import client_route
+from src.controller.document_controller import document_route
 from src.exception.handlers import register_exception_handlers
 
 
@@ -10,7 +11,8 @@ app = FastAPI(
 )
 
 routes = [
-    client_route
+    client_route,
+    document_route,
 ]
 
 for route in routes:

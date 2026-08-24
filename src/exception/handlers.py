@@ -9,6 +9,8 @@ from src.exception.exceptions import (
     ResourceAlreadyExistsError,
     ResourceNotFoundError,
     InvalidIdentifierError,
+    ExpiredDocumentError,
+    FileUploadError,
 )
 
 
@@ -16,8 +18,11 @@ from src.exception.exceptions import (
 STATUS_BY_EXCEPTION = {
     UnderageClientError: status.HTTP_400_BAD_REQUEST,
     InvalidIdentifierError: status.HTTP_400_BAD_REQUEST,
+    ExpiredDocumentError: status.HTTP_400_BAD_REQUEST,
     ResourceAlreadyExistsError: status.HTTP_409_CONFLICT,
     ResourceNotFoundError: status.HTTP_404_NOT_FOUND,
+    # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.
+    FileUploadError: status.HTTP_502_BAD_GATEWAY,
 }
 
 DEFAULT_APP_EXCEPTION_STATUS = status.HTTP_400_BAD_REQUEST
