@@ -5,10 +5,10 @@ from datetime import date, datetime, timezone
 
 class DocumentType(Enum):
 
-    PASSAPORTE = 'passport'
-    TITULO_RESIDENCIA = 'titulo de residencia'
-    COMPROVATIVO_MORADA = 'comprovativo de morada'
-    BI = "bilhete de identidade"
+    PASSAPORTE = 'Passaporte'
+    TITULO_RESIDENCIA = 'Titulo de residencia'
+    COMPROVATIVO_MORADA = 'Comprovativo de morada'
+    BI = "Bilhete de identidade"
 
 class DocumentStatus(Enum):
 

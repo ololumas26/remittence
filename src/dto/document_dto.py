@@ -1,0 +1,38 @@
+from pydantic import BaseModel, ConfigDict, field_validator
+from datetime import date, datetime
+from uuid import UUID
+
+
+from src.model.document import DocumentType, DocumentStatus
+
+
+class CreateDocument(BaseModel):
+    client_id: UUID
+    document_type: DocumentType
+    document_number: str
+    expiration_date: date
+
+    @field_validator('document_number', mode='after')
+    @classmethod
+    def validate_not_blank(cls, value: str):
+        if not value or value.strip() == '':
+            raise ValueError("Este campo não pode estar vazio")
+
+        return value
+
+
+class DocumentOut(BaseModel):
+    """DTO de saída: o que a API expõe sobre um Document."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    client_id: UUID
+    document_type: DocumentType
+    document_number: str
+    expiration_date: date
+    is_expired: bool
+    status: DocumentStatus
+    file_path: str | None
+    created_at: datetime
+    updated_at: datetime | None
