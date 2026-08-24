@@ -21,6 +21,20 @@ class CreateDocument(BaseModel):
         return value
 
 
+class UpdateDocument(BaseModel):
+    document_type: DocumentType | None = None
+    document_number: str | None = None
+    expiration_date: date | None = None
+
+    @field_validator('document_number', mode='after')
+    @classmethod
+    def validate_not_blank(cls, value: str | None):
+        if value is not None and value.strip() == '':
+            raise ValueError("Este campo não pode estar vazio")
+
+        return value
+
+
 class DocumentOut(BaseModel):
     """DTO de saída: o que a API expõe sobre um Document."""
 

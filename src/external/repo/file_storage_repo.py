@@ -13,6 +13,10 @@ class FileStorage(ABC):
     def upload(self, file):
         raise NotImplementedError
 
+    @abstractmethod
+    def delete(self, file_path):
+        raise NotImplementedError
+
 
 class SupabaseFileStorage(FileStorage):
 
@@ -23,6 +27,10 @@ class SupabaseFileStorage(FileStorage):
 
     def _build_absolut_path(self, file_path : str):
         return f'{supabase_url}/storage/v1/object/{file_path}'
+
+    def _extract_relative_path(self, absolute_path : str) -> str:
+        prefix = f'{supabase_url}/storage/v1/object/{self.BUCKET_NAME}/'
+        return absolute_path.removeprefix(prefix)
 
     async def upload(self, file : UploadFile, client_id):
 
@@ -38,3 +46,13 @@ class SupabaseFileStorage(FileStorage):
         except Exception as e:
             print("houve um erro ao submeter o ficheiro: ", str(e))
             raise FileUploadError("Não foi possível submeter o ficheiro para o storage. Tenta novamente.") from e
+
+    def delete(self, file_path : str):
+        # Best-effort: se a remoção do ficheiro antigo falhar, não deve impedir
+        # que o update em curso (já persistido) seja considerado bem sucedido.
+        try:
+            relative_path = self._extract_relative_path(file_path)
+            self.supabase_client.storage.from_(self.BUCKET_NAME).remove([relative_path])
+
+        except Exception as e:
+            print("houve um erro ao apagar o ficheiro antigo: ", str(e))
