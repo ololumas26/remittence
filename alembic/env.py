@@ -5,9 +5,10 @@ from sqlalchemy import pool
 
 from alembic import context
 
-from src.model import(
-    Client,
-    Document)
+from src.model.remittance import Remittance
+from src.model.client import Client
+from src.model.document import Document
+
 
 from sqlmodel import SQLModel
 # this is the Alembic Config object, which provides
