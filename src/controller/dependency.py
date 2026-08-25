@@ -11,9 +11,6 @@ from src.external.repo.file_storage_repo import SupabaseFileStorage
 def get_client_service(session : session_DP):
     return ClientService(SqlClientRepository(session))
 
-# def get_file_storage_service(client : client):
-#     file_storage = SupabaseFileStorage(client)
-#     return FileStorageService(file_storage)
 
 def get_document_service(session : session_DP):
     file_storage = SupabaseFileStorage(client)

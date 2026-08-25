@@ -17,3 +17,4 @@ class Client(SQLModel, table = True):
     updated_at : datetime = Field(default=None, nullable=True, sa_type=DateTime)
 
     document : list['Document'] = Relationship(back_populates='client', cascade_delete=True)
+    remittance : list['Remittance'] = Relationship(back_populates='client')
