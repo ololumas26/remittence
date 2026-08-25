@@ -33,6 +33,9 @@ class SqlDocumentRepository():
 
         return self.db.exec(statement).one()
 
+    def get_by_client_id(self, client_id : UUID):
+        return self.db.exec(select(Document).where(Document.client_id == client_id)).all()
+
     def save(self, document : Document):
 
         self.db.add(document)

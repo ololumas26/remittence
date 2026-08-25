@@ -13,8 +13,8 @@ class RemittanceStatus(Enum):
 
 class AllowedCoins(Enum):
 
-    EUR = 'Euro'
-    AOA = 'Kwanza Angolano'
+    EUR = 'euro'
+    AOA = 'aoa'
 
 
 class Remittance(SQLModel, table = True):
@@ -23,12 +23,12 @@ class Remittance(SQLModel, table = True):
 
     id : uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
     client_id : uuid.UUID = Field(foreign_key='client.id', nullable=False)
-    fee : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
+    service_fee_rate : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     amount : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     amount_converted : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     source_coin : AllowedCoins = Field(default=AllowedCoins.EUR, nullable=False)
     target_coin : AllowedCoins = Field(default=AllowedCoins.AOA, nullable=False)
-    exchange_fee : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
+    service_fee_amount : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     exchange_rate : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     recipient_name : str = Field(nullable=False, max_length=100)
     recipient_account_iban : str = Field(nullable=False, max_length=35)

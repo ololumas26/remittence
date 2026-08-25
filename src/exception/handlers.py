@@ -13,6 +13,10 @@ from src.exception.exceptions import (
     FileUploadError,
     DocumentNotEditableError,
     DocumentNotDeletableError,
+    ClientNotVerifiedError,
+    InvalidAmountError,
+    SameCurrencyError,
+    SourceCurrencyError,
 )
 
 
@@ -23,6 +27,10 @@ STATUS_BY_EXCEPTION = {
     ExpiredDocumentError: status.HTTP_400_BAD_REQUEST,
     DocumentNotEditableError: status.HTTP_400_BAD_REQUEST,
     DocumentNotDeletableError: status.HTTP_400_BAD_REQUEST,
+    ClientNotVerifiedError: status.HTTP_400_BAD_REQUEST,
+    InvalidAmountError: status.HTTP_400_BAD_REQUEST,
+    SameCurrencyError: status.HTTP_400_BAD_REQUEST,
+    SourceCurrencyError: status.HTTP_400_BAD_REQUEST,
     ResourceAlreadyExistsError: status.HTTP_409_CONFLICT,
     ResourceNotFoundError: status.HTTP_404_NOT_FOUND,
     # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.
