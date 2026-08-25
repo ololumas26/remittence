@@ -16,3 +16,12 @@ def submit(create_remittance : CreateRemittance, remittance_service : Remittance
         data=RemittanceOut.model_validate(remittance),
         message="Remessa submetida com sucesso",
     )
+
+
+@remittance_route.patch("/{id}/send")
+def mark_as_sent(id, remittance_service : RemittanceService = Depends(get_remittance_service)):
+    remittance = remittance_service.mark_as_sent(id)
+    return success_response(
+        data=RemittanceOut.model_validate(remittance),
+        message="Remessa marcada como enviada com sucesso",
+    )

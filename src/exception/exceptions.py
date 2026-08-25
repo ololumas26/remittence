@@ -59,3 +59,9 @@ class SameCurrencyError(AppException):
 class SourceCurrencyError(AppException):
     """Levantada quando o corredor de moedas pedido não é o único atualmente suportado (EUR -> AOA)."""
     code = "SOURCE_CURRENCY"
+
+
+class InvalidRemittanceStatusError(AppException):
+    """Levantada quando se tenta transitar uma remessa para um estado a partir de um estado atual inválido
+    (ex: marcar como enviada uma remessa que já foi enviada ou que foi rejeitada)."""
+    code = "INVALID_REMITTANCE_STATUS"

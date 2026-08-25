@@ -2,7 +2,7 @@ from src.model.repo.remittance_repo import RemittanceRepository
 from src.model.repo.client_repo import ClientRepository
 from src.model.repo.document_repo import DocumentRepository
 from src.dto.remittance_dto import CreateRemittance
-from src.model.remittance import Remittance, AllowedCoins
+from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
@@ -12,9 +12,12 @@ from src.exception.exceptions import (
     ClientNotVerifiedError,
     InvalidAmountError,
     SameCurrencyError,
-    SourceCurrencyError
+    SourceCurrencyError,
+    InvalidRemittanceStatusError,
+    InvalidIdentifierError,
 )
 from uuid import UUID
+from datetime import datetime, timezone
 
 
 # Documentos que servem como identificação pessoal — qualquer um destes, aprovado
@@ -87,4 +90,34 @@ class RemittanceService:
         )
 
         return self.remittance_repo.save(remittance)
+
+    def mark_as_sent(self, remittance_id : str) -> Remittance:
+
+        remittance = self._get_or_raise(remittance_id)
+
+        if remittance.status != RemittanceStatus.IN_PROGRESS:
+            raise InvalidRemittanceStatusError(
+                f"Só é possível marcar como enviada uma remessa em progresso "
+                f"(estado atual: {remittance.status.value})"
+            )
+
+        remittance.status = RemittanceStatus.SENT
+        remittance.updated_at = datetime.now(timezone.utc)
+
+        return self.remittance_repo.save(remittance)
+
+    def _get_or_raise(self, remittance_id : str) -> Remittance:
+        remittance = self.remittance_repo.get_by_id(self._parse_id(remittance_id))
+
+        if not remittance:
+            raise ResourceNotFoundError(f"Remessa com id {remittance_id} não encontrada")
+
+        return remittance
+
+    @staticmethod
+    def _parse_id(remittance_id : str) -> UUID:
+        try:
+            return UUID(str(remittance_id))
+        except (ValueError, AttributeError, TypeError):
+            raise InvalidIdentifierError(f"'{remittance_id}' não é um identificador válido")
 
