@@ -40,3 +40,22 @@ class DocumentNotEditableError(AppException):
 class DocumentNotDeletableError(AppException):
     """Levantada quando se tenta apagar um documento que já foi avaliado (aprovado ou rejeitado)."""
     code = "DOCUMENT_NOT_DELETABLE"
+
+
+class ClientNotVerifiedError(AppException):
+    """Levantada quando o cliente tenta submeter uma remessa sem ter documentos de KYC aprovados e válidos."""
+    code = "CLIENT_NOT_VERIFIED"
+
+
+class InvalidAmountError(AppException):
+    """Levantada quando o valor da remessa é inferior ao mínimo permitido."""
+    code = "INVALID_AMOUNT"
+
+
+class SameCurrencyError(AppException):
+    """Levantada quando a moeda de origem e de destino da remessa são iguais."""
+    code = "SAME_CURRENCY"
+
+class SourceCurrencyError(AppException):
+    """Levantada quando o corredor de moedas pedido não é o único atualmente suportado (EUR -> AOA)."""
+    code = "SOURCE_CURRENCY"

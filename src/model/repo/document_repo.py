@@ -22,6 +22,10 @@ class DocumentRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_by_client_id(self, client_id : UUID) -> list[Document]:
+        raise NotImplementedError
+
+    @abstractmethod
     def save(self, document : Document) -> Document:
         raise NotImplementedError
 
