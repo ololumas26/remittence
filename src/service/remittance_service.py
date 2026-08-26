@@ -2,6 +2,7 @@ from src.model.repo.remittance_repo import RemittanceRepository
 from src.model.repo.client_repo import ClientRepository
 from src.model.repo.document_repo import DocumentRepository
 from src.dto.remittance_dto import CreateRemittance
+from src.dto.filter import RemittanceFilterParams
 from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date
@@ -91,28 +92,70 @@ class RemittanceService:
 
         return self.remittance_repo.save(remittance)
 
-    def mark_as_sent(self, remittance_id : str) -> Remittance:
+
+    def _transition_status(self, remittance_id : str, new_status : RemittanceStatus):
 
         remittance = self._get_or_raise(remittance_id)
 
+        message = {
+            RemittanceStatus.SENT : 'enviada',
+            RemittanceStatus.REJECTED: 'rejeitada'
+        }
+        
         if remittance.status != RemittanceStatus.IN_PROGRESS:
             raise InvalidRemittanceStatusError(
-                f"Só é possível marcar como enviada uma remessa em progresso "
+                f"Só é possível marcar como {message[new_status]} uma remessa em progresso "
                 f"(estado atual: {remittance.status.value})"
             )
-
-        remittance.status = RemittanceStatus.SENT
+        remittance.status = new_status
         remittance.updated_at = datetime.now(timezone.utc)
+        return remittance
+       
 
+    def mark_as_sent(self, remittance_id : str) -> Remittance:
+
+        remittance = self._transition_status(remittance_id, RemittanceStatus.SENT)
         return self.remittance_repo.save(remittance)
 
+
+    def mark_as_rejected(self, remittance_id : str):
+
+        remittance = self._transition_status(remittance_id, RemittanceStatus.REJECTED)
+        return self.remittance_repo.save(remittance)
+
+
+    def get_remittance_by_id(self, remittance_id : str):
+        return self._get_or_raise(remittance_id)
+
+    def get_all(self, filter : RemittanceFilterParams):
+        remittances = self.remittance_repo.get_all(
+            limit=filter.limit,
+            offset=filter.offset,
+            order_by=filter.order_by,
+            client_id=filter.client_id,
+            status=filter.status,
+            created_from=filter.created_from,
+            created_to=filter.created_to,
+        )
+        total = self.remittance_repo.count(
+            client_id=filter.client_id,
+            status=filter.status,
+            created_from=filter.created_from,
+            created_to=filter.created_to,
+        )
+
+        return remittances, total
+
+
     def _get_or_raise(self, remittance_id : str) -> Remittance:
+
         remittance = self.remittance_repo.get_by_id(self._parse_id(remittance_id))
 
         if not remittance:
             raise ResourceNotFoundError(f"Remessa com id {remittance_id} não encontrada")
 
         return remittance
+
 
     @staticmethod
     def _parse_id(remittance_id : str) -> UUID:

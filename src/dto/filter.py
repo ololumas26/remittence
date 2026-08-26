@@ -1,6 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal
 from uuid import UUID
+from datetime import date
+
+from src.model.remittance import RemittanceStatus
 
 
 class FilterParams(BaseModel):
@@ -11,3 +14,19 @@ class FilterParams(BaseModel):
 
 class DocumentFilterParams(FilterParams):
     client_id: UUID | None = None
+
+
+class RemittanceFilterParams(FilterParams):
+    client_id: UUID | None = None
+    status: RemittanceStatus | None = None
+    # Intervalo de datas sobre created_at (inclusive dos dois lados). Datas, não
+    # datetimes — quem está a filtrar não quer saber da hora exata, só do dia.
+    created_from: date | None = None
+    created_to: date | None = None
+
+    @model_validator(mode='after')
+    def validate_date_range(self):
+        if self.created_from and self.created_to and self.created_from > self.created_to:
+            raise ValueError("'created_from' não pode ser posterior a 'created_to'")
+
+        return self
