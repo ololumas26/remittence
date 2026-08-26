@@ -1,0 +1,15 @@
+ANGOLA_BANK_CODES = {
+    "0004": "Banco Caixa Geral Angola (BCGA)",
+    "0005": "Banco de Comércio e Indústria (BCI)",
+    "0006": "Banco de Fomento Angola (BFA)",
+    "0040": "Banco Angolano de Investimentos (BAI)",
+    "0043": "Banco Comercial Angolano (BCA)",
+    "0047": "Banco Keve",
+    "0048": "Banco BAI Micro Finanças (BMF)",
+    "0051": "Banco BIC",
+    "0054": "Banco de Desenvolvimento de Angola (BDA)",
+    "0055": "Banco Millennium Atlântico (BMA)",
+    "0059": "Banco Comercial do Huambo (BCH)",
+    "0066": "Banco Yetu",
+    "0067": "Banco de Investimento Rural (BIR)",
+}
