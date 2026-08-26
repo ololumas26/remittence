@@ -1,7 +1,8 @@
 from pydantic import BaseModel, ConfigDict, field_validator, ValidationInfo
 from datetime import date, datetime
 from uuid import UUID
-from validator.email_validator import is_valid_email
+from src.validator.email_validator import is_valid_email
+
 
 to_portuguese = {
     'name' :'Nome',
