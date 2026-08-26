@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from src.model.remittance import Remittance
+from src.model.remittance import Remittance, RemittanceStatus
 from uuid import UUID
+from datetime import date
 
 
 class RemittanceRepository(ABC):
@@ -11,4 +12,19 @@ class RemittanceRepository(ABC):
 
     @abstractmethod
     def save(self, remittance : Remittance) -> Remittance:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_all(
+        self, limit : int, offset : int, order_by : str, client_id : UUID | None = None,
+        status : RemittanceStatus | None = None, created_from : date | None = None,
+        created_to : date | None = None,
+    ) -> list[Remittance]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def count(
+        self, client_id : UUID | None = None, status : RemittanceStatus | None = None,
+        created_from : date | None = None, created_to : date | None = None,
+    ) -> int:
         raise NotImplementedError
