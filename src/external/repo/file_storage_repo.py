@@ -48,8 +48,7 @@ class SupabaseFileStorage(FileStorage):
             raise FileUploadError("Não foi possível submeter o ficheiro para o storage. Tenta novamente.") from e
 
     def delete(self, file_path : str):
-        # Best-effort: se a remoção do ficheiro antigo falhar, não deve impedir
-        # que o update em curso (já persistido) seja considerado bem sucedido.
+       
         try:
             relative_path = self._extract_relative_path(file_path)
             self.supabase_client.storage.from_(self.BUCKET_NAME).remove([relative_path])
