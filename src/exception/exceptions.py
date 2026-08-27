@@ -65,3 +65,9 @@ class InvalidRemittanceStatusError(AppException):
     """Levantada quando se tenta transitar uma remessa para um estado a partir de um estado atual inválido
     (ex: marcar como enviada uma remessa que já foi enviada ou que foi rejeitada)."""
     code = "INVALID_REMITTANCE_STATUS"
+
+
+class AuthenticationError(AppException):
+    """Levantada quando a autenticação falha: token em falta/inválido/expirado, ou credenciais erradas
+    no login/signup."""
+    code = "AUTHENTICATION_FAILED"

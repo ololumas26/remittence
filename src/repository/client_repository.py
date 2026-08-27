@@ -17,6 +17,10 @@ class SqlClientRepository():
         return self.db.exec(select(Client).where(Client.id == client_id)).first()
 
 
+    def get_by_auth_user_id(self, auth_user_id):
+        return self.db.exec(select(Client).where(Client.auth_user_id == auth_user_id)).first()
+
+
     def get_all(self, limit : int, offset : int, order_by : str):
         order_column = getattr(Client, order_by)
         statement = select(Client).order_by(order_column).limit(limit).offset(offset)

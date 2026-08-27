@@ -18,23 +18,37 @@ class ClientService:
     def __init__(self, client_repository : ClientRepository):
         self.client_repo = client_repository
 
-    def create(self, create_client : CreateClient):
-    
+    def create(self, create_client : CreateClient, auth_user_id : UUID):
+
         has_client = self.client_repo.get_by_email(create_client.email)
 
         if has_client:
             raise ResourceAlreadyExistsError("Já existe uma conta com esse email")
 
+        if self.client_repo.get_by_auth_user_id(auth_user_id):
+            raise ResourceAlreadyExistsError("Já tens um perfil de cliente associado a esta conta")
+
         if get_18_year_date(create_client.birth_date) > get_current_date():
             raise UnderageClientError("Apenas clientes com 18+ anos podem se registar")
 
 
-        client = Client(**create_client.model_dump())
+        client = Client(**create_client.model_dump(), auth_user_id=auth_user_id)
         return self.client_repo.save(client)
 
 
     def get_by_id(self, client_id):
         return self._get_or_raise(client_id)
+
+
+    def get_by_auth_user_id(self, auth_user_id : UUID) -> Client:
+        client = self.client_repo.get_by_auth_user_id(auth_user_id)
+
+        if not client:
+            raise ResourceNotFoundError(
+                "Ainda não completaste o teu perfil de cliente (POST /client/) com esta conta"
+            )
+
+        return client
 
 
     def get_all(self, filter : FilterParams):

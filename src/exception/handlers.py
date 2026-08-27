@@ -18,6 +18,7 @@ from src.exception.exceptions import (
     SameCurrencyError,
     SourceCurrencyError,
     InvalidRemittanceStatusError,
+    AuthenticationError,
 )
 
 
@@ -35,6 +36,7 @@ STATUS_BY_EXCEPTION = {
     InvalidRemittanceStatusError: status.HTTP_400_BAD_REQUEST,
     ResourceAlreadyExistsError: status.HTTP_409_CONFLICT,
     ResourceNotFoundError: status.HTTP_404_NOT_FOUND,
+    AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.
     FileUploadError: status.HTTP_502_BAD_GATEWAY,
 }

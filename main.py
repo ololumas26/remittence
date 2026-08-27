@@ -1,17 +1,16 @@
 from fastapi import FastAPI
+from src.controller.auth_controller import auth_route
 from src.controller.client_controller import client_route
 from src.controller.document_controller import document_route
 from src.controller.remittance_controller import remittance_route
 from src.exception.handlers import register_exception_handlers
 
 
-# TODO: Autenticação e autorização — hoje qualquer chamada acede a qualquer
-# endpoint sem qualquer verificação de quem está a pedir. Decidir quem se
-# autentica (cliente final? equipa interna de operações? os dois, com papéis
-# diferentes?) e restringir endpoints sensíveis por papel — em particular
-# mark_as_sent/mark_as_rejected e o acesso a dados de outros clientes.
-# Como já se usa Supabase para storage, o Supabase Auth pode poupar trabalho
-# em vez de JWT/OAuth escrito de raiz.
+# TODO: Autenticação — feita para o cliente final via Supabase Auth
+# (POST /auth/signup, /auth/login, /auth/refresh; rotas do próprio cliente
+# protegidas por get_current_client). Falta ainda: autenticação da equipa
+# interna de operações (staff), que hoje continua sem controlo nenhum —
+# em particular mark_as_sent/mark_as_rejected e GET /client/ (listar todos).
 
 # TODO: Base de dados em produção — DATABASE_URL ainda não está configurada
 # para nenhum ambiente real (a app usa SQLite local por omissão). Definir a
@@ -38,6 +37,7 @@ app = FastAPI(
 )
 
 routes = [
+    auth_route,
     client_route,
     document_route,
     remittance_route,

@@ -14,6 +14,10 @@ class ClientRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_by_auth_user_id(self, auth_user_id : UUID) -> Client | None:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_all(self, limit : int, offset : int, order_by : str) -> list[Client]:
         raise NotImplementedError
 
