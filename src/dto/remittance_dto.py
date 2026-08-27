@@ -4,6 +4,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from src.model.remittance import RemittanceStatus, AllowedCoins
+from src.validator.iban_validator import is_valid_iban 
 
 
 class CreateRemittance(BaseModel):
@@ -22,6 +23,14 @@ class CreateRemittance(BaseModel):
 
         return value
 
+    @field_validator('recipient_account_iban', mode='after')
+    @classmethod
+    def validate_iban(cls, iban : str):
+
+        if not is_valid_iban(iban):
+            raise ValueError("Iban inválido, use um iban válido")
+
+        return iban
 
 class RemittanceOut(BaseModel):
     """DTO de saída: o que a API expõe sobre uma Remittance."""

@@ -32,12 +32,14 @@ class CreateClient(ClientBase):
 
         return value
 
-    def validate_email(cls, value : str):
+    @field_validator('email', mode='after')
+    @classmethod
+    def validate_email(cls, email : str):
 
-        if not is_valid_email(value):
+        if not is_valid_email(email):
             raise ValueError("Email com formato incorreto")
 
-        return value
+        return email
 
 
 class UpdateClient(ClientBase):
