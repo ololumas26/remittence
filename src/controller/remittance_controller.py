@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from typing import Annotated
 from src.constant.app_constant import APP_PREFIX
 from src.dto.remittance_dto import CreateRemittance, RemittanceOut
@@ -8,7 +8,8 @@ from src.service.remittance_service import RemittanceService
 from src.dto.response import success_response, paginated_response
 from src.exception.exceptions import ResourceNotFoundError
 from src.model.client import Client
-
+from src.security.client_ip import get_client_ip
+from src.security.oauth2 import get_user
 
 remittance_route = APIRouter(prefix=f'{APP_PREFIX}/remittance', tags=['remittances'])
 
@@ -23,13 +24,15 @@ def _ensure_owner(remittance, client : Client):
 @remittance_route.post("/", status_code=status.HTTP_201_CREATED)
 def submit(
     create_remittance : CreateRemittance,
+    request : Request,
     client : Client = Depends(get_current_client),
     remittance_service : RemittanceService = Depends(get_remittance_service),
 ):
     # Um cliente só pode submeter remessas em seu próprio nome — ignora/sobrepõe
     # qualquer client_id vindo no corpo do pedido.
     create_remittance.client_id = client.id
-    remittance = remittance_service.submit(create_remittance)
+    ip_address = get_client_ip(request)
+    remittance = remittance_service.submit(create_remittance, ip_address=ip_address)
     return success_response(
         data=RemittanceOut.model_validate(remittance),
         message="Remessa submetida com sucesso",
@@ -40,7 +43,7 @@ def submit(
 # estarem abertas como estão agora — fica assim por decisão consciente enquanto
 # não existe autenticação de equipa interna (ver TODO em main.py).
 @remittance_route.patch("/{id}/send")
-def mark_as_sent(id, remittance_service : RemittanceService = Depends(get_remittance_service)):
+def mark_as_sent(id, remittance_service : RemittanceService = Depends(get_remittance_service), token : str = Depends(get_user)):
     remittance = remittance_service.mark_as_sent(id)
     return success_response(
         data=RemittanceOut.model_validate(remittance),

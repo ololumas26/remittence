@@ -12,6 +12,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Annotated
 from src.external.service.file_storage_service import FileStorageService
 from src.external.repo.file_storage_repo import SupabaseFileStorage
+from src.external.service.geolocation_service import GeolocationService
 from src.exception.exceptions import AuthenticationError
 from src.model.client import Client
 
@@ -25,8 +26,17 @@ def get_document_service(session : session_DP):
     return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session),file_storage_service)
 
 
-def get_remittance_service(session : session_DP):
-    return RemittanceService(SqlRemittanceRepository(session), SqlClientRepository(session), SqlDocumentRepository(session))
+# Uma única instância partilhada: o Reader do geoip2 abre o ficheiro .mmdb
+# uma vez (lazy, na primeira consulta) e é seguro para reutilizar entre pedidos.
+_geolocation_service = GeolocationService()
+
+
+def get_geolocation_service() -> GeolocationService:
+    return _geolocation_service
+
+
+def get_remittance_service(session : session_DP, geolocation_service : GeolocationService = Depends(get_geolocation_service)):
+    return RemittanceService(SqlRemittanceRepository(session), SqlClientRepository(session), SqlDocumentRepository(session), geolocation_service)
 
 
 def get_auth_service(client_service : ClientService = Depends(get_client_service)):

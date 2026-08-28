@@ -71,3 +71,9 @@ class AuthenticationError(AppException):
     """Levantada quando a autenticação falha: token em falta/inválido/expirado, ou credenciais erradas
     no login/signup."""
     code = "AUTHENTICATION_FAILED"
+
+
+class RestrictedRegionError(AppException):
+    """Levantada quando uma remessa é submetida a partir de um IP cujo país não está na lista de
+    países permitidos (ver ALLOWED_COUNTRIES)."""
+    code = "RESTRICTED_REGION"

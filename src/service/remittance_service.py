@@ -7,7 +7,8 @@ from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
-from src.constant.app_constant import MIN_AMOUNT, EXCHANGE_RATE, SERVICE_FEE_RATE
+from src.external.service.geolocation_service import GeolocationService
+from src.constant.app_constant import MIN_AMOUNT, EXCHANGE_RATE, SERVICE_FEE_RATE, ALLOWED_COUNTRIES
 from src.exception.exceptions import (
     ResourceNotFoundError,
     ClientNotVerifiedError,
@@ -16,6 +17,7 @@ from src.exception.exceptions import (
     SourceCurrencyError,
     InvalidRemittanceStatusError,
     InvalidIdentifierError,
+    RestrictedRegionError,
 )
 from uuid import UUID
 from datetime import datetime, timezone
@@ -29,16 +31,17 @@ PERSONAL_DOCUMENT_TYPES = (DocumentType.BI, DocumentType.PASSAPORTE, DocumentTyp
 class RemittanceService:
 
     def __init__(self, remittance_repository : RemittanceRepository, client_repository : ClientRepository,
-                 document_repository : DocumentRepository):
+                 document_repository : DocumentRepository, geolocation_service : GeolocationService):
         self.remittance_repo = remittance_repository
         self.client_repo = client_repository
         self.document_repo = document_repository
+        self.geolocation_service = geolocation_service
 
     def _ensure_client_is_verified(self, client_id : UUID) -> None:
-    
+
             documents = self.document_repo.get_by_client_id(client_id)
             today = get_current_date()
-    
+
             has_valid_personal_document = any(
                 document.document_type in PERSONAL_DOCUMENT_TYPES
                 and document.status == DocumentStatus.APPROVED
@@ -53,15 +56,27 @@ class RemittanceService:
             #     and document.expiration_date >= today
             #     for document in documents
             # )
-    
+
             if not (has_valid_personal_document):
                 raise ClientNotVerifiedError(
                     "Cliente precisa de ter um documento de identificação e um comprovativo de "
                     "morada aprovados e dentro da validade"
                 )
-    
 
-    def submit(self, create_remittance : CreateRemittance) -> Remittance:
+
+    def _ensure_allowed_region(self, ip_address : str) -> None:
+        # IPs privados/reservados (dev local, testes) devolvem None e não são
+        # bloqueados — ver GeolocationService. Para qualquer IP público,
+        # falha fechado: só passa se o país for identificado E permitido.
+        country_code = self.geolocation_service.get_country_code(ip_address)
+
+        if country_code is not None and country_code not in ALLOWED_COUNTRIES:
+            raise RestrictedRegionError(
+                "De momento só é possível submeter remessas a partir de Angola ou Portugal"
+            )
+
+
+    def submit(self, create_remittance : CreateRemittance, ip_address : str = "") -> Remittance:
 
         client = self.client_repo.get_by_id(create_remittance.client_id)
 
@@ -69,6 +84,8 @@ class RemittanceService:
             raise ResourceNotFoundError(f"Cliente com id {create_remittance.client_id} não encontrado")
 
         self._ensure_client_is_verified(create_remittance.client_id)
+
+        self._ensure_allowed_region(ip_address)
 
         if create_remittance.amount < MIN_AMOUNT:
             raise InvalidAmountError(f"O valor mínimo permitido por remessa é {MIN_AMOUNT}")
@@ -88,6 +105,7 @@ class RemittanceService:
             service_fee_amount=service_fee_amount,
             exchange_rate=EXCHANGE_RATE,
             amount_converted=amount_converted,
+            ip_address=ip_address or None,
         )
 
         return self.remittance_repo.save(remittance)
@@ -101,7 +119,7 @@ class RemittanceService:
             RemittanceStatus.SENT : 'enviada',
             RemittanceStatus.REJECTED: 'rejeitada'
         }
-        
+
         if remittance.status != RemittanceStatus.IN_PROGRESS:
             raise InvalidRemittanceStatusError(
                 f"Só é possível marcar como {message[new_status]} uma remessa em progresso "
@@ -110,7 +128,7 @@ class RemittanceService:
         remittance.status = new_status
         remittance.updated_at = datetime.now(timezone.utc)
         return remittance
-       
+
 
     def mark_as_sent(self, remittance_id : str) -> Remittance:
 
@@ -163,4 +181,3 @@ class RemittanceService:
             return UUID(str(remittance_id))
         except (ValueError, AttributeError, TypeError):
             raise InvalidIdentifierError(f"'{remittance_id}' não é um identificador válido")
-
