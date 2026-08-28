@@ -29,8 +29,8 @@ def get_remittance_service(session : session_DP):
     return RemittanceService(SqlRemittanceRepository(session), SqlClientRepository(session), SqlDocumentRepository(session))
 
 
-def get_auth_service():
-    return AuthService(client)
+def get_auth_service(client_service : ClientService = Depends(get_client_service)):
+    return AuthService(client, client_service)
 
 
 # auto_error=False para nós controlarmos a resposta de erro (mantém o
