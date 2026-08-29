@@ -9,7 +9,7 @@ from src.dto.response import success_response, paginated_response
 from src.exception.exceptions import ResourceNotFoundError
 from src.model.client import Client
 from src.security.client_ip import get_client_ip
-from src.security.oauth2 import get_user
+from src.security.dependencies import require_role
 
 remittance_route = APIRouter(prefix=f'{APP_PREFIX}/remittance', tags=['remittances'])
 
@@ -21,6 +21,8 @@ def _ensure_owner(remittance, client : Client):
         raise ResourceNotFoundError(f"Remessa com id {remittance.id} não encontrada")
 
 
+
+# TODO: Antes de submeter um pedido de remessa extrair o id do cliente no token e deoois fazer as devidas validações
 @remittance_route.post("/", status_code=status.HTTP_201_CREATED)
 def submit(
     create_remittance : CreateRemittance,
@@ -39,11 +41,12 @@ def submit(
     )
 
 
-# TODO: mark_as_sent/mark_as_rejected deviam exigir um papel de staff, não
-# estarem abertas como estão agora — fica assim por decisão consciente enquanto
-# não existe autenticação de equipa interna (ver TODO em main.py).
 @remittance_route.patch("/{id}/send")
-def mark_as_sent(id, remittance_service : RemittanceService = Depends(get_remittance_service), token : str = Depends(get_user)):
+def mark_as_sent(
+    id,
+    remittance_service : RemittanceService = Depends(get_remittance_service),
+    _ : str = Depends(require_role("staff")),
+):
     remittance = remittance_service.mark_as_sent(id)
     return success_response(
         data=RemittanceOut.model_validate(remittance),
@@ -52,7 +55,11 @@ def mark_as_sent(id, remittance_service : RemittanceService = Depends(get_remitt
 
 
 @remittance_route.patch("/{id}/reject")
-def mark_as_rejected(id,  remittance_service : RemittanceService = Depends(get_remittance_service)):
+def mark_as_rejected(
+    id,
+    remittance_service : RemittanceService = Depends(get_remittance_service),
+    _ : str = Depends(require_role("staff")),
+):
     remittance = remittance_service.mark_as_rejected(id)
     return success_response(
         data=RemittanceOut.model_validate(remittance),

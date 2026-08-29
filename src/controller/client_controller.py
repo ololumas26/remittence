@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
 from src.constant.app_constant import APP_PREFIX
 from src.dto.client_dto import CreateClient, UpdateClient, ClientOut
-from src.controller.dependency import get_client_service, get_current_user, get_current_client
+from src.security.dependencies import get_client_service, get_current_user, require_role
+from src.controller.dependency import get_current_client
 from src.service.client_service import ClientService
 from src.dto.filter import FilterParams
 from src.dto.response import success_response, paginated_response
@@ -28,9 +29,11 @@ def create(
 
 
 @client_route.get("/")
-def get_all(filter : Annotated[FilterParams, Query()], client_service : ClientService = Depends(get_client_service)):
-    # TODO: restringir a staff quando existir autenticação de equipa interna —
-    # por agora fica aberta (staff = o próprio dono do projeto, sem conta própria ainda).
+def get_all(
+    filter : Annotated[FilterParams, Query()],
+    client_service : ClientService = Depends(get_client_service),
+    _ : str = Depends(require_role("staff")),
+):
     clients, total = client_service.get_all(filter)
     data = [ClientOut.model_validate(client) for client in clients]
 
