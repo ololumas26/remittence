@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status
 from src.constant.app_constant import APP_PREFIX
 from src.dto.client_dto import CreateClient, UpdateClient, ClientOut
-from src.security.dependencies import get_client_service, get_current_user, require_role
+from src.security.dependencies import get_client_service, get_current_user, require_staff, Role
 from src.controller.dependency import get_current_client
 from src.service.client_service import ClientService
 from src.dto.filter import FilterParams
@@ -32,7 +32,7 @@ def create(
 def get_all(
     filter : Annotated[FilterParams, Query()],
     client_service : ClientService = Depends(get_client_service),
-    _ : str = Depends(require_role("staff")),
+    _ : Role = Depends(require_staff),
 ):
     clients, total = client_service.get_all(filter)
     data = [ClientOut.model_validate(client) for client in clients]

@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
@@ -10,6 +11,15 @@ from src.service.client_service import ClientService
 from src.service.auth_service import AuthService
 from src.supabase.server import client
 from src.exception.exceptions import AuthenticationError, AuthorizationError
+
+
+class Role(str, Enum):
+    """
+    Papéis aplicacionais reconhecidos pela API. Herdar de str permite comparar
+    diretamente com o valor bruto guardado no app_metadata (Role.STAFF == "staff").
+    """
+    CLIENT = "client"
+    STAFF = "staff"
 
 
 def get_client_service(session : session_DP) -> ClientService:
@@ -34,6 +44,7 @@ def get_current_user(
     Valida o token Bearer e devolve o User do Supabase Auth (a conta, não o
     perfil de KYC — para isso ver get_current_client em controller/dependency.py).
     """
+
     if credentials is None:
         raise AuthenticationError("Token de autenticação em falta")
 
@@ -45,9 +56,9 @@ def get_user_id(user = Depends(get_current_user)) -> UUID:
     return UUID(str(user.id))
 
 
-def get_role(user = Depends(get_current_user)) -> str:
+def get_role(user = Depends(get_current_user)) -> Role:
     """
-    Papel aplicacional do utilizador autenticado (ex: "client", "staff").
+    Papel aplicacional do utilizador autenticado.
 
     Vem do app_metadata da conta no Supabase — que só é editável via
     dashboard/Admin API, nunca pelo próprio utilizador (signup/update não
@@ -57,29 +68,44 @@ def get_role(user = Depends(get_current_user)) -> str:
     GoTrue — normalmente "authenticated" — e não tem nada a ver com papéis
     da aplicação).
 
-    Contas sem "role" definido em app_metadata são tratadas como "client"
-    (o caso normal, de longe a maioria das contas).
+    Contas sem "role" definido em app_metadata são tratadas como Role.CLIENT
+    (o caso normal, de longe a maioria das contas). Um valor inesperado (ex:
+    erro de digitação ao editar à mão no dashboard) também cai em
+    Role.CLIENT, em vez de rebentar o pedido com 500 — mais restrito por
+    omissão em vez de falhar de forma pouco clara.
     """
     app_metadata = user.app_metadata or {}
-    return app_metadata.get("role", "client")
+    raw_role = app_metadata.get("role", Role.CLIENT.value)
+
+    try:
+        return Role(raw_role)
+    except ValueError:
+        return Role.CLIENT
 
 
-def require_role(required_role : str):
+def require_role(required_role : Role):
     """
     Fábrica de dependency para proteger rotas por papel aplicacional.
 
-    Uso: remittance_service : ... = Depends(...), _ : str = Depends(require_role("staff"))
+    Uso: _ : Role = Depends(require_role(Role.STAFF))
 
-    Para uma conta ter o papel "staff", é preciso ires ao dashboard do
+    Para uma conta ter o papel staff, é preciso ires ao dashboard do
     Supabase (Authentication > Users > [a tua conta] > Raw App Meta Data) e
     adicionares {"role": "staff"} manualmente — não há nenhum fluxo na API
     para uma conta se autopromover a staff, de propósito.
     """
-    def dependency(role : str = Depends(get_role)) -> str:
+    def dependency(role : Role = Depends(get_role)) -> Role:
         if role != required_role:
             raise AuthorizationError(
-                f"Esta operação está reservada a utilizadores com o papel '{required_role}'"
+                f"Esta operação está reservada a utilizadores com o papel '{required_role.value}'"
             )
         return role
 
     return dependency
+
+
+# Instância partilhada para o caso mais comum — importar isto em vez de
+# chamar require_role(Role.STAFF) em cada rota (evita repetir o mesmo
+# call site e permite ao FastAPI reconhecer/cachear a mesma dependency
+# dentro de um pedido).
+require_staff = require_role(Role.STAFF)

@@ -9,7 +9,7 @@ from src.dto.response import success_response, paginated_response
 from src.exception.exceptions import ResourceNotFoundError
 from src.model.client import Client
 from src.security.client_ip import get_client_ip
-from src.security.dependencies import require_role
+from src.security.dependencies import require_staff, Role
 
 remittance_route = APIRouter(prefix=f'{APP_PREFIX}/remittance', tags=['remittances'])
 
@@ -45,7 +45,7 @@ def submit(
 def mark_as_sent(
     id,
     remittance_service : RemittanceService = Depends(get_remittance_service),
-    _ : str = Depends(require_role("staff")),
+    _ : Role = Depends(require_staff),
 ):
     remittance = remittance_service.mark_as_sent(id)
     return success_response(
@@ -58,7 +58,7 @@ def mark_as_sent(
 def mark_as_rejected(
     id,
     remittance_service : RemittanceService = Depends(get_remittance_service),
-    _ : str = Depends(require_role("staff")),
+    _ : Role = Depends(require_staff),
 ):
     remittance = remittance_service.mark_as_rejected(id)
     return success_response(
