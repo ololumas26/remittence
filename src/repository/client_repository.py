@@ -1,6 +1,8 @@
 from src.model.repo.client_repo import ClientRepository
 from sqlmodel import Session, select, func
+from sqlalchemy.exc import IntegrityError
 from src.model.client import Client
+from src.exception.exceptions import ResourceAlreadyExistsError
 from uuid import UUID
 
 
@@ -39,7 +41,20 @@ class SqlClientRepository():
     def save(self, client: Client):
 
         self.db.add(client)
-        self.db.commit()
+
+        try:
+            self.db.commit()
+        except IntegrityError:
+            # Rede de segurança contra corridas: a verificação de elegibilidade
+            # na camada de serviço já cobre o caso comum, mas duas submissões
+            # concorrentes com o mesmo email podiam passar as duas na
+            # verificação antes de qualquer uma commitar. As constraints
+            # unique da base é que garantem a correção aqui.
+            self.db.rollback()
+            raise ResourceAlreadyExistsError(
+                "Já existe uma conta com esse email ou associada a este utilizador"
+            )
+
         self.db.refresh(client)
 
         return client

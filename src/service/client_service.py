@@ -20,9 +20,10 @@ class ClientService:
 
     def create(self, create_client : CreateClient, auth_user_id : UUID):
 
-        self._ensure_eligible(create_client, auth_user_id=auth_user_id)
+        parsed_auth_user_id = self._parse_id(auth_user_id)
+        self._ensure_eligible(create_client, auth_user_id=parsed_auth_user_id)
 
-        client = Client(**create_client.model_dump(), auth_user_id=auth_user_id)
+        client = Client(**create_client.model_dump(), auth_user_id=parsed_auth_user_id)
         return self.client_repo.save(client)
 
 

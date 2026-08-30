@@ -1,4 +1,6 @@
+import logging
 from fastapi import FastAPI, Request, status
+from slowapi.errors import RateLimitExceeded
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -47,6 +49,8 @@ STATUS_BY_EXCEPTION = {
 
 DEFAULT_APP_EXCEPTION_STATUS = status.HTTP_400_BAD_REQUEST
 
+logger = logging.getLogger("remittance")
+
 
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     status_code = STATUS_BY_EXCEPTION.get(type(exc), DEFAULT_APP_EXCEPTION_STATUS)
@@ -60,7 +64,7 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     first_error = exc.errors()[0]
     field = ".".join(str(part) for part in first_error["loc"] if part != "body")
-    message = f"{field}: {first_error['msg']}" if field else first_error["msg"]
+    message = f"{field}: {first_error['msg']}" if field else first_error['msg']
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -70,7 +74,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     # Rede de segurança: qualquer exceção não prevista cai aqui em vez de
-    # vazar uma página de erro genérica do Starlette/stack trace.
+    # vazar uma página de erro genérica do Starlette/stack trace. Antes disto
+    # o erro real desaparecia em silêncio — agora fica registado no log com
+    # stack trace, para dar para investigar em produção.
+    logger.exception("Erro não tratado em %s %s", request.method, request.url.path)
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=error_response(
@@ -80,7 +88,19 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content=error_response(
+            error="RATE_LIMIT_EXCEEDED",
+            message="Demasiados pedidos. Tenta novamente dentro de instantes.",
+        ),
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
+

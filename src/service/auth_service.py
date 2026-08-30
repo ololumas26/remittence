@@ -14,8 +14,13 @@ class AuthService:
     de password, só traduzimos os pedidos/respostas para o formato da nossa
     API e mapeamos falhas do Supabase para as nossas exceções de domínio.
 
-    O signup também orquestra a criação do perfil de KYC (ClientService),
-    para o cliente ficar com conta + perfil num único pedido.
+    O perfil de KYC (ClientService) só é criado depois, através de
+    POST /client/, quando a conta já tiver sessão válida — ou seja, com o
+    email confirmado (quando essa confirmação está ativa no projeto
+    Supabase). Isto evita criar um registo de cliente "por confirmar" que
+    nunca chega a ser usado se a pessoa não confirmar o email, e evita
+    verificar a mesma elegibilidade (email livre, idade mínima) duas vezes
+    no mesmo pedido.
     """
 
     def __init__(self, supabase_client: SupabaseClient, client_service: ClientService):
@@ -26,11 +31,13 @@ class AuthService:
 
         create_client = CreateClient(**sign_up.model_dump(exclude={"password"}))
 
-        # 1. Elegibilidade primeiro (email livre, idade mínima) — se falhar,
-        # nunca chegamos a criar a conta no Supabase.
+        # Elegibilidade primeiro (email livre, idade mínima) — pré-verificação
+        # rápida para não criar uma conta no Supabase para alguém que nunca
+        # vai conseguir ter perfil. A verificação "a sério" (que persiste)
+        # só volta a acontecer em ClientService.create(), chamado a partir de
+        # POST /client/ — não há dupla verificação no mesmo pedido.
         self.client_service.ensure_eligible(create_client)
 
-        # 2. Conta no Supabase.
         try:
             response = self.supabase.auth.sign_up({
                 "email": sign_up.email,
@@ -47,16 +54,14 @@ class AuthService:
         if not response.user:
             raise AuthenticationError("Não foi possível criar a conta")
 
-        # 3. Perfil de KYC, já ligado à conta acabada de criar.
-        self.client_service.create(create_client, auth_user_id=response.user.id)
-
         # Se a confirmação de email estiver ativa no projeto Supabase, a conta
-        # e o perfil já existem, mas ainda não vem sessão até o email ser
-        # confirmado.
+        # existe mas ainda não há sessão até o email ser confirmado. O perfil
+        # de KYC só é criado mais tarde (POST /client/, já autenticado com
+        # sessão válida) — nunca aqui, com a conta ainda por confirmar.
         if not response.session:
             raise AuthenticationError(
-                "Conta criada com sucesso, mas é preciso confirmar o email "
-                "antes de iniciar sessão (verifica a caixa de entrada)."
+                "Conta criada com sucesso. Confirma o teu email e depois inicia "
+                "sessão para completares o teu perfil (POST /client/)."
             )
 
         return TokenOut(
