@@ -13,6 +13,10 @@ class Client(SQLModel, table = True):
     email : str = Field(nullable=False, unique=True, index=True)
     phone_number : str = Field(nullable=True, max_digits=12, default=None)
     birth_date : date = Field(nullable=False)
+    # Liga este cliente ao utilizador correspondente no Supabase Auth. Fica
+    # nullable para não partir dados já existentes sem conta associada, mas
+    # o fluxo de criação (ClientService.create) passa sempre a preenchê-lo.
+    auth_user_id : uuid.UUID | None = Field(nullable=True, unique=True, index=True, default=None)
     created_at : datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at : datetime = Field(default=None, nullable=True, sa_type=DateTime)
 

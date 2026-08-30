@@ -65,3 +65,22 @@ class InvalidRemittanceStatusError(AppException):
     """Levantada quando se tenta transitar uma remessa para um estado a partir de um estado atual inválido
     (ex: marcar como enviada uma remessa que já foi enviada ou que foi rejeitada)."""
     code = "INVALID_REMITTANCE_STATUS"
+
+
+class AuthenticationError(AppException):
+    """Levantada quando a autenticação falha: token em falta/inválido/expirado, ou credenciais erradas
+    no login/signup."""
+    code = "AUTHENTICATION_FAILED"
+
+
+class RestrictedRegionError(AppException):
+    """Levantada quando uma remessa é submetida a partir de um IP cujo país não está na lista de
+    países permitidos (ver ALLOWED_COUNTRIES)."""
+    code = "RESTRICTED_REGION"
+
+
+class AuthorizationError(AppException):
+    """Levantada quando o utilizador está autenticado mas não tem o papel/permissão necessária
+    para a operação (ex: rota exclusiva de staff acedida por uma conta sem esse papel).
+    Distinta de AuthenticationError, que é para quando nem sequer há um utilizador válido."""
+    code = "AUTHORIZATION_FAILED"

@@ -33,6 +33,7 @@ class Remittance(SQLModel, table = True):
     recipient_name : str = Field(nullable=False, max_length=100)
     recipient_account_iban : str = Field(nullable=False, max_length=35)
     status : RemittanceStatus = Field(default=RemittanceStatus.IN_PROGRESS, nullable=False)
+    ip_address : str | None = Field(nullable=True, max_length=45, default=None)
     created_at : datetime = Field(default_factory=lambda : datetime.now(timezone.utc))
     updated_at : datetime = Field(nullable=True, default=None)
 
