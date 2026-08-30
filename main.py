@@ -30,6 +30,9 @@ from src.exception.handlers import register_exception_handlers
 # TODO: Regras de compliance (AML) — limites por transação/cliente, listas
 # de sanções, etc. Fora do âmbito do MVP mas a decidir antes de escalar.
 
+# TODO: Implementar/configurar SMTP para envio de email de confirmação.
+# TODO: Colocar uma role e um id para quem for marcar uma remessa como enviada ou rejeitada
+
 
 app = FastAPI(
     title="Remittance api",

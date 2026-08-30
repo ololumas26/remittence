@@ -20,9 +20,6 @@ def _ensure_owner(remittance, client : Client):
     if remittance.client_id != client.id:
         raise ResourceNotFoundError(f"Remessa com id {remittance.id} não encontrada")
 
-
-
-# TODO: Antes de submeter um pedido de remessa extrair o id do cliente no token e deoois fazer as devidas validações
 @remittance_route.post("/", status_code=status.HTTP_201_CREATED)
 def submit(
     create_remittance : CreateRemittance,
@@ -30,7 +27,7 @@ def submit(
     client : Client = Depends(get_current_client),
     remittance_service : RemittanceService = Depends(get_remittance_service),
 ):
-    # Um cliente só pode submeter remessas em seu próprio nome — ignora/sobrepõe
+    # Um cliente só pode submeter remessas em seu próprio nome — ignora/sobrpõe
     # qualquer client_id vindo no corpo do pedido.
     create_remittance.client_id = client.id
     ip_address = get_client_ip(request)

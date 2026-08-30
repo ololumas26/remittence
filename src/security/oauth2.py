@@ -1,6 +1,7 @@
 from fastapi.security import OAuth2PasswordBearer
-
+from fastapi import Depends
 from src.constant.app_constant import APP_PREFIX
+from src.supabase.server import client
 
 
 # Esquema OAuth2 (fluxo "password") usado para proteger rotas.
@@ -15,3 +16,9 @@ from src.constant.app_constant import APP_PREFIX
 # Este ficheiro só define o esquema — ainda não está ligado a nenhuma rota
 # nem dependency.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{APP_PREFIX}/auth/login")
+
+def get_user(token : str = Depends(oauth2_scheme)):
+
+    user = client.auth.get_user(token)
+    print("Dados do usuário: ", user)
+    # print("Chegou o token aqui: ", token)

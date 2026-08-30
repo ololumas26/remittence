@@ -1,9 +1,9 @@
 from pydantic import BaseModel, field_validator
 from src.validator.email_validator import is_valid_email
+from src.dto.client_dto import CreateClient
 
 
-class SignUp(BaseModel):
-    email: str
+class SignUp(CreateClient):
     password: str
 
     @field_validator('email', mode='after')

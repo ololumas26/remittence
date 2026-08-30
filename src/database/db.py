@@ -5,7 +5,7 @@ from typing import Annotated
 
 
 DATABASE_URL = get_connection()
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL or "sqlite:///remittance.db")
 
 
 def get_db_session():

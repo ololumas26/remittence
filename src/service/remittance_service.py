@@ -49,7 +49,7 @@ class RemittanceService:
                 for document in documents
             )
 
-            #TODO: Reativar apenas quando melhorar a questão da s submissão do comprovativo de morada
+            #TODO: Reativar apenas quando melhorar a questão da submissão do comprovativo de morada
             # has_valid_address_document = any(
             #     document.document_type == DocumentType.COMPROVATIVO_MORADA
             #     and document.status == DocumentStatus.APPROVED
@@ -64,16 +64,16 @@ class RemittanceService:
                 )
 
 
-    def _ensure_allowed_region(self, ip_address : str) -> None:
-        # IPs privados/reservados (dev local, testes) devolvem None e não são
-        # bloqueados — ver GeolocationService. Para qualquer IP público,
-        # falha fechado: só passa se o país for identificado E permitido.
-        country_code = self.geolocation_service.get_country_code(ip_address)
+    # def _ensure_allowed_region(self, ip_address : str) -> None:
+    #     # IPs privados/reservados (dev local, testes) devolvem None e não são
+    #     # bloqueados — ver GeolocationService. Para qualquer IP público,
+    #     # falha fechado: só passa se o país for identificado E permitido.
+    #     country_code = self.geolocation_service.get_country_code(ip_address)
 
-        if country_code is not None and country_code not in ALLOWED_COUNTRIES:
-            raise RestrictedRegionError(
-                "De momento só é possível submeter remessas a partir de Angola ou Portugal"
-            )
+    #     if country_code is not None and country_code not in ALLOWED_COUNTRIES:
+    #         raise RestrictedRegionError(
+    #             "De momento só é possível submeter remessas a partir de Angola ou Portugal"
+    #         )
 
 
     def submit(self, create_remittance : CreateRemittance, ip_address : str = "") -> Remittance:
@@ -85,7 +85,7 @@ class RemittanceService:
 
         self._ensure_client_is_verified(create_remittance.client_id)
 
-        self._ensure_allowed_region(ip_address)
+        # self._ensure_allowed_region(ip_address)
 
         if create_remittance.amount < MIN_AMOUNT:
             raise InvalidAmountError(f"O valor mínimo permitido por remessa é {MIN_AMOUNT}")
