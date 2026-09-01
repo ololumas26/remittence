@@ -67,6 +67,37 @@ class ClientService:
         return client
 
 
+    def create_from_signup_metadata(self, auth_user_id : UUID, email : str, metadata : dict) -> Client:
+        """
+        Cria o perfil de KYC automaticamente a partir dos dados guardados em
+        user_metadata no momento do signup (ver AuthService.sign_up) — usado
+        por get_current_client na primeira ação autenticada de uma conta que
+        ainda não tem perfil, para não obrigar o cliente a preencher outra
+        vez nome/telefone/data de nascimento depois de confirmar o email.
+
+        Se a metadata estiver incompleta ou em falta (ex: conta staff criada
+        diretamente no dashboard do Supabase, ou conta anterior a esta
+        funcionalidade existir), não inventamos nada: cai no mesmo erro de
+        sempre, a indicar para completar o perfil manualmente via POST
+        /client/. A validação "a sério" (email livre, idade mínima) continua
+        a acontecer em create() — isto é só uma forma alternativa de montar
+        o CreateClient, não um atalho que a evita.
+        """
+        try:
+            create_client = CreateClient(
+                name=metadata["name"],
+                email=email,
+                phone_number=metadata["phone_number"],
+                birth_date=metadata["birth_date"],
+            )
+        except (KeyError, TypeError, ValueError):
+            raise ResourceNotFoundError(
+                "Ainda não completaste o teu perfil de cliente (POST /client/) com esta conta"
+            )
+
+        return self.create(create_client, auth_user_id=auth_user_id)
+
+
     def get_all(self, filter : FilterParams):
         clients = self.client_repo.get_all(
             limit=filter.limit,

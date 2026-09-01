@@ -14,13 +14,19 @@ class AuthService:
     de password, só traduzimos os pedidos/respostas para o formato da nossa
     API e mapeamos falhas do Supabase para as nossas exceções de domínio.
 
-    O perfil de KYC (ClientService) só é criado depois, através de
-    POST /client/, quando a conta já tiver sessão válida — ou seja, com o
-    email confirmado (quando essa confirmação está ativa no projeto
-    Supabase). Isto evita criar um registo de cliente "por confirmar" que
-    nunca chega a ser usado se a pessoa não confirmar o email, e evita
-    verificar a mesma elegibilidade (email livre, idade mínima) duas vezes
-    no mesmo pedido.
+    O perfil de KYC (ClientService) só é persistido depois, quando a conta
+    já tiver sessão válida — ou seja, com o email confirmado (quando essa
+    confirmação está ativa no projeto Supabase). Isto evita criar um
+    registo de cliente "por confirmar" que nunca chega a ser usado se a
+    pessoa não confirmar o email, e evita verificar a mesma elegibilidade
+    (email livre, idade mínima) duas vezes no mesmo pedido.
+
+    Para não obrigar o cliente a preencher outra vez nome/telefone/data de
+    nascimento depois de confirmar o email, esses dados (não sensíveis a
+    nível de autorização — ao contrário de um "role") viajam em
+    user_metadata desde o signup. get_current_client (ver
+    src/controller/dependency.py) usa-os para criar o perfil
+    automaticamente na primeira ação autenticada, sem pedir nada outra vez.
     """
 
     def __init__(self, supabase_client: SupabaseClient, client_service: ClientService):
@@ -42,6 +48,17 @@ class AuthService:
             response = self.supabase.auth.sign_up({
                 "email": sign_up.email,
                 "password": sign_up.password,
+                # Guardado em user_metadata só para recuperar estes dados depois
+                # da confirmação do email (ver get_current_client) — nunca é
+                # usado para autorização/papéis, isso continua exclusivamente
+                # em app_metadata.
+                "options": {
+                    "data": {
+                        "name": create_client.name,
+                        "phone_number": create_client.phone_number,
+                        "birth_date": create_client.birth_date.isoformat(),
+                    },
+                },
             })
         except AuthWeakPasswordError:
             raise AuthenticationError(

@@ -1,3 +1,4 @@
+from uuid import UUID
 from src.service.document_service import DocumentService
 from src.service.remittance_service import RemittanceService
 from src.service.client_service import ClientService
@@ -11,7 +12,8 @@ from src.external.service.file_storage_service import FileStorageService
 from src.external.repo.file_storage_repo import SupabaseFileStorage
 from src.external.service.geolocation_service import GeolocationService
 from src.model.client import Client
-from src.security.dependencies import get_client_service, get_user_id
+from src.exception.exceptions import ResourceNotFoundError
+from src.security.dependencies import get_client_service, get_current_user
 
 # get_client_service fica re-exportado daqui (agora definido em
 # src.security.dependencies, junto com o resto da identidade/autenticação)
@@ -39,7 +41,20 @@ def get_remittance_service(session : session_DP, geolocation_service : Geolocati
 
 
 def get_current_client(
-    user_id = Depends(get_user_id),
+    user = Depends(get_current_user),
     client_service : ClientService = Depends(get_client_service),
 ) -> Client:
-    return client_service.get_by_auth_user_id(user_id)
+    user_id = UUID(str(user.id))
+
+    try:
+        return client_service.get_by_auth_user_id(user_id)
+    except ResourceNotFoundError:
+        # Ainda sem perfil — tenta criar automaticamente a partir dos dados
+        # guardados em user_metadata no signup (ver AuthService.sign_up).
+        # Se não houver metadata suficiente, isto simplesmente relança o
+        # mesmo ResourceNotFoundError de sempre.
+        return client_service.create_from_signup_metadata(
+            auth_user_id=user_id,
+            email=user.email,
+            metadata=user.user_metadata or {},
+        )
