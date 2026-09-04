@@ -13,8 +13,10 @@ from src.exception.exceptions import (
     InvalidIdentifierError,
     ExpiredDocumentError,
     FileUploadError,
+    AccountDeletionError,
     DocumentNotEditableError,
     DocumentNotDeletableError,
+    InvalidDocumentStatusError,
     ClientNotVerifiedError,
     InvalidAmountError,
     SameCurrencyError,
@@ -33,6 +35,7 @@ STATUS_BY_EXCEPTION = {
     ExpiredDocumentError: status.HTTP_400_BAD_REQUEST,
     DocumentNotEditableError: status.HTTP_400_BAD_REQUEST,
     DocumentNotDeletableError: status.HTTP_400_BAD_REQUEST,
+    InvalidDocumentStatusError: status.HTTP_400_BAD_REQUEST,
     ClientNotVerifiedError: status.HTTP_400_BAD_REQUEST,
     InvalidAmountError: status.HTTP_400_BAD_REQUEST,
     SameCurrencyError: status.HTTP_400_BAD_REQUEST,
@@ -45,6 +48,8 @@ STATUS_BY_EXCEPTION = {
     AuthorizationError: status.HTTP_403_FORBIDDEN,
     # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.
     FileUploadError: status.HTTP_502_BAD_GATEWAY,
+    # 502: a falha é do Auth externo (Supabase), não de algo que o cliente enviou errado.
+    AccountDeletionError: status.HTTP_502_BAD_GATEWAY,
 }
 
 DEFAULT_APP_EXCEPTION_STATUS = status.HTTP_400_BAD_REQUEST

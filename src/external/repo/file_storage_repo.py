@@ -45,7 +45,7 @@ class SupabaseFileStorage(FileStorage):
 
         except Exception as e:
             print("houve um erro ao submeter o ficheiro: ", str(e))
-            raise FileUploadError("Não foi possível submeter o ficheiro para o storage. Tenta novamente.") from e
+            raise FileUploadError("Não foi possível submeter o ficheiro. Tenta novamente.") from e
 
     def delete(self, file_path : str):
        

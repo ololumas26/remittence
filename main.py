@@ -9,6 +9,7 @@ from src.security.rate_limit import limiter
 from src.controller.auth_controller import auth_route
 from src.controller.client_controller import client_route
 from src.controller.document_controller import document_route
+from src.controller.recipient_controller import recipient_route
 from src.controller.remittance_controller import remittance_route
 from src.exception.handlers import register_exception_handlers
 
@@ -64,6 +65,7 @@ routes = [
     auth_route,
     client_route,
     document_route,
+    recipient_route,
     remittance_route,
 ]
 

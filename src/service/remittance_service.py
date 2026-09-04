@@ -1,13 +1,19 @@
+import logging
+
 from src.model.repo.remittance_repo import RemittanceRepository
 from src.model.repo.client_repo import ClientRepository
 from src.model.repo.document_repo import DocumentRepository
+from src.model.repo.recipient_repo import RecipientRepository
 from src.dto.remittance_dto import CreateRemittance
 from src.dto.filter import RemittanceFilterParams
+from src.model.client import Client
 from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
-from src.service.age_calculator import get_current_date
+from src.service.age_calculator import get_current_date, get_18_year_date
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
+from src.service.remittance_email_template import remittance_created_subject, render_remittance_created_email
 from src.external.service.geolocation_service import GeolocationService
+from src.external.service.email_service import EmailService
 from src.constant.app_constant import MIN_AMOUNT, EXCHANGE_RATE, SERVICE_FEE_RATE, ALLOWED_COUNTRIES
 from src.exception.exceptions import (
     ResourceNotFoundError,
@@ -18,9 +24,12 @@ from src.exception.exceptions import (
     InvalidRemittanceStatusError,
     InvalidIdentifierError,
     RestrictedRegionError,
+    UnderageClientError,
 )
 from uuid import UUID
 from datetime import datetime, timezone
+
+logger = logging.getLogger("remittance")
 
 
 # Documentos que servem como identificação pessoal — qualquer um destes, aprovado
@@ -31,11 +40,26 @@ PERSONAL_DOCUMENT_TYPES = (DocumentType.BI, DocumentType.PASSAPORTE, DocumentTyp
 class RemittanceService:
 
     def __init__(self, remittance_repository : RemittanceRepository, client_repository : ClientRepository,
-                 document_repository : DocumentRepository, geolocation_service : GeolocationService):
+                 document_repository : DocumentRepository, recipient_repository : RecipientRepository,
+                 geolocation_service : GeolocationService, email_service : EmailService):
         self.remittance_repo = remittance_repository
         self.client_repo = client_repository
         self.document_repo = document_repository
+        self.recipient_repo = recipient_repository
         self.geolocation_service = geolocation_service
+        self.email_service = email_service
+
+    def _ensure_client_is_adult(self, client) -> None:
+        # ClientService.create/update já bloqueiam data de nascimento <18 anos ao gravar — mas
+        # isso é o único ponto de controlo, e há dois caminhos que ainda podem produzir um
+        # cliente com o registo "errado": um login com Google (que não dá data de nascimento,
+        # ver AuthProvider "needs-profile") depende inteiramente da pessoa preencher esse campo
+        # com verdade no ecrã de completar perfil, e alterações de perfil antigas/futuras podem
+        # não ter passado pela mesma validação. Reverificar aqui, no momento mais sensível (uma
+        # remessa de dinheiro a sair), é a rede de segurança final.
+        if get_18_year_date(client.birth_date) > get_current_date():
+            raise UnderageClientError("Apenas clientes com 18+ anos podem submeter remessas")
+
 
     def _ensure_client_is_verified(self, client_id : UUID) -> None:
 
@@ -76,12 +100,27 @@ class RemittanceService:
             )
 
 
+    def _get_owned_recipient(self, recipient_id : UUID, client_id : UUID):
+        # Mesma resposta de um id inexistente propositadamente — não confirmamos
+        # a um cliente que um destinatário de outra pessoa existe.
+        recipient = self.recipient_repo.get_by_id(recipient_id)
+
+        if not recipient or recipient.client_id != client_id:
+            raise ResourceNotFoundError(f"Destinatário com id {recipient_id} não encontrado")
+
+        return recipient
+
+
     def submit(self, create_remittance : CreateRemittance, ip_address : str = "") -> Remittance:
 
         client = self.client_repo.get_by_id(create_remittance.client_id)
 
         if not client:
             raise ResourceNotFoundError(f"Cliente com id {create_remittance.client_id} não encontrado")
+
+        recipient = self._get_owned_recipient(create_remittance.recipient_id, client.id)
+
+        self._ensure_client_is_adult(client)
 
         self._ensure_client_is_verified(create_remittance.client_id)
 
@@ -105,10 +144,31 @@ class RemittanceService:
             service_fee_amount=service_fee_amount,
             exchange_rate=EXCHANGE_RATE,
             amount_converted=amount_converted,
+            # Snapshot do destinatário no momento da submissão — continua correto
+            # mesmo que o Recipient seja depois editado ou apagado.
+            recipient_name=recipient.full_name,
+            recipient_account_iban=recipient.account_iban,
             ip_address=ip_address or None,
         )
 
-        return self.remittance_repo.save(remittance)
+        saved_remittance = self.remittance_repo.save(remittance)
+
+        self._send_remittance_created_email(client, saved_remittance)
+
+        return saved_remittance
+
+
+    def _send_remittance_created_email(self, client : Client, remittance : Remittance) -> None:
+        # EmailService.send já não levanta exceção nenhuma (ver lá) — este try/except é só uma
+        # segunda rede de segurança para uma falha imprevista a MONTAR o email (ex: um valor
+        # None inesperado), para nunca deixar a submissão da remessa em si falhar por causa da
+        # notificação por email.
+        try:
+            subject = remittance_created_subject(remittance)
+            html = render_remittance_created_email(client.name, remittance)
+            self.email_service.send(client.email, subject, html)
+        except Exception:
+            logger.exception("Falha ao preparar o email de remessa criada para a remessa %s", remittance.id)
 
 
     def _transition_status(self, remittance_id : str, new_status : RemittanceStatus):

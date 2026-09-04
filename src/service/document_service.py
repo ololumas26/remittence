@@ -10,6 +10,7 @@ from src.exception.exceptions import (
     ExpiredDocumentError,
     DocumentNotEditableError,
     DocumentNotDeletableError,
+    InvalidDocumentStatusError,
     InvalidIdentifierError,
 )
 from src.external.service.file_storage_service import FileStorageService
@@ -97,6 +98,39 @@ class DocumentService:
 
         if document.file_path:
             self.file_storage_service.delete_previous(document.file_path)
+
+
+    def _transition_status(self, document_id : str, new_status : DocumentStatus) -> Document:
+
+        document = self._get_or_raise(document_id)
+
+        message = {
+            DocumentStatus.APPROVED : 'aprovado',
+            DocumentStatus.REJECTED : 'rejeitado',
+        }
+
+        if document.status != DocumentStatus.PENDING:
+            raise InvalidDocumentStatusError(
+                f"Só é possível marcar como {message[new_status]} um documento pendente "
+                f"(estado atual: {document.status.value})"
+            )
+
+        document.status = new_status
+        document.updated_at = datetime.now(timezone.utc)
+
+        return document
+
+
+    def approve(self, document_id : str) -> Document:
+
+        document = self._transition_status(document_id, DocumentStatus.APPROVED)
+        return self.document_repo.save(document)
+
+
+    def reject(self, document_id : str) -> Document:
+
+        document = self._transition_status(document_id, DocumentStatus.REJECTED)
+        return self.document_repo.save(document)
 
     def get_by_id(self, document_id : str) -> Document:
         return self._get_or_raise(document_id)

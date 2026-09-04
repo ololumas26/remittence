@@ -22,7 +22,18 @@ class Remittance(SQLModel, table = True):
     __tablename__ = 'remittance'
 
     id : uuid.UUID = Field(primary_key=True, default_factory=uuid.uuid4)
-    client_id : uuid.UUID = Field(foreign_key='client.id', nullable=False)
+    # Fica nullable e com ondelete='SET NULL' (ver migration) pela mesma
+    # razão que recipient_id: apagar a conta de um cliente (ver "apagar
+    # conta") nunca deve apagar/bloquear o histórico de remessas já feitas —
+    # o histórico fica órfão (client_id fica None) mas continua a existir.
+    client_id : uuid.UUID | None = Field(foreign_key='client.id', nullable=True, default=None)
+    # Referência ao destinatário que originou esta remessa. Fica nullable e
+    # com ondelete='SET NULL' (ver migration) porque apagar um destinatário
+    # nunca deve apagar/bloquear o histórico de remessas já feitas para ele —
+    # recipient_name/recipient_account_iban abaixo são a cópia (snapshot) do
+    # destinatário no momento da submissão e continuam válidos mesmo que o
+    # Recipient seja depois editado ou apagado.
+    recipient_id : uuid.UUID | None = Field(foreign_key='recipient.id', nullable=True, default=None)
     service_fee_rate : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     amount : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     amount_converted : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
@@ -38,3 +49,4 @@ class Remittance(SQLModel, table = True):
     updated_at : datetime = Field(nullable=True, default=None)
 
     client : 'Client' = Relationship(back_populates='remittance')
+    recipient : 'Recipient' = Relationship(back_populates='remittance')

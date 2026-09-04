@@ -22,7 +22,9 @@ class SqlDocumentRepository():
         if client_id:
             statement = statement.where(Document.client_id == client_id)
 
-        statement = statement.order_by(order_column).limit(limit).offset(offset)
+        # .desc() sempre — quem lista remessas/documentos/destinatários quer sempre o mais
+        # recente primeiro, nunca o mais antigo.
+        statement = statement.order_by(order_column.desc()).limit(limit).offset(offset)
         return self.db.exec(statement).all()
 
     def count(self, client_id : UUID | None = None) -> int:

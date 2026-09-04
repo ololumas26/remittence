@@ -16,6 +16,15 @@ class DocumentFilterParams(FilterParams):
     client_id: UUID | None = None
 
 
+class RecipientFilterParams(FilterParams):
+    client_id: UUID | None = None
+    # "last_sent_at": ordena pela remessa mais recente enviada a cada destinatário (não por
+    # quando o destinatário foi criado) — usado pela Home para mostrar sempre as últimas pessoas
+    # a quem foram enviados valores primeiro. Destinatários sem nenhuma remessa ainda ficam no
+    # fim, ordenados por created_at (ver SqlRecipientRepository.get_all).
+    order_by: Literal["created_at", "updated_at", "last_sent_at"] = "created_at"
+
+
 class RemittanceFilterParams(FilterParams):
     client_id: UUID | None = None
     status: RemittanceStatus | None = None

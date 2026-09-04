@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, Query, status
 from src.constant.app_constant import APP_PREFIX
 from src.dto.client_dto import CreateClient, UpdateClient, ClientOut
-from src.security.dependencies import get_client_service, get_current_user, require_staff, Role
+from src.security.dependencies import get_client_service, get_current_user, require_staff, Role, get_auth_service
 from src.controller.dependency import get_current_client
 from src.service.client_service import ClientService
+from src.service.auth_service import AuthService
 from src.dto.filter import FilterParams
 from src.dto.response import success_response, paginated_response
 from src.model.client import Client
@@ -41,7 +42,17 @@ def get_all(
 
 
 @client_route.delete("/me")
-def delete_me(client : Client = Depends(get_current_client), client_service : ClientService = Depends(get_client_service)):
+def delete_me(
+    client : Client = Depends(get_current_client),
+    client_service : ClientService = Depends(get_client_service),
+    auth_service : AuthService = Depends(get_auth_service),
+):
+    # A conta no Auth é apagada primeiro: enquanto ela existir,
+    # get_current_client recria automaticamente o perfil local a partir do
+    # user_metadata no próximo pedido autenticado — apagar só o perfil
+    # local "ressuscitaria" a conta.
+    if client.auth_user_id is not None:
+        auth_service.delete_account(client.auth_user_id)
     client_service.delete(str(client.id))
     return success_response(data=None)
 

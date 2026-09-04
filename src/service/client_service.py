@@ -61,7 +61,7 @@ class ClientService:
 
         if not client:
             raise ResourceNotFoundError(
-                "Ainda não completaste o teu perfil de cliente (POST /client/) com esta conta"
+                "Ainda não completaste o teu perfil de cliente com esta conta"
             )
 
         return client
@@ -78,10 +78,10 @@ class ClientService:
         Se a metadata estiver incompleta ou em falta (ex: conta staff criada
         diretamente no dashboard do Supabase, ou conta anterior a esta
         funcionalidade existir), não inventamos nada: cai no mesmo erro de
-        sempre, a indicar para completar o perfil manualmente via POST
-        /client/. A validação "a sério" (email livre, idade mínima) continua
-        a acontecer em create() — isto é só uma forma alternativa de montar
-        o CreateClient, não um atalho que a evita.
+        sempre, a indicar que o perfil ainda não está completo. A validação
+        "a sério" (email livre, idade mínima) continua a acontecer em
+        create() — isto é só uma forma alternativa de montar o CreateClient,
+        não um atalho que a evita.
         """
         try:
             create_client = CreateClient(
@@ -92,7 +92,7 @@ class ClientService:
             )
         except (KeyError, TypeError, ValueError):
             raise ResourceNotFoundError(
-                "Ainda não completaste o teu perfil de cliente (POST /client/) com esta conta"
+                "Ainda não completaste o teu perfil de cliente com esta conta"
             )
 
         return self.create(create_client, auth_user_id=auth_user_id)
@@ -117,6 +117,24 @@ class ClientService:
     def update(self, client_id : str, update_client : UpdateClient):
 
         client = self._get_or_raise(client_id)
+
+        # Email é unique na BD (ver model/client.py) mas update_client não
+        # passa pela mesma validação de elegibilidade que o signup — sem
+        # este check, mudar para um email já usado por outra conta rebentava
+        # num IntegrityError cru (500) em vez de um erro de domínio claro.
+        new_email = update_client.email
+        if new_email is not None and new_email != client.email:
+            existing = self.client_repo.get_by_email(new_email)
+            if existing and existing.id != client.id:
+                raise ResourceAlreadyExistsError("Já existe uma conta com esse email")
+
+        # A idade mínima só era verificada na criação (ver _ensure_eligible) — editar o perfil
+        # (ex: "editar perfil" no frontend) deixava alterar a data de nascimento para uma que
+        # tornasse o cliente menor sem qualquer validação server-side. RemittanceService também
+        # reverifica isto no momento de submeter uma remessa, mas bloquear já aqui, na escrita,
+        # é mais direto do que só na leitura seguinte.
+        if update_client.birth_date is not None and get_18_year_date(update_client.birth_date) > get_current_date():
+            raise UnderageClientError("Apenas clientes com 18+ anos podem manter a conta ativa")
 
         for key, value in update_client.model_dump(exclude_unset=True).items():
             if value is not None:
