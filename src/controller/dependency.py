@@ -1,17 +1,22 @@
+from uuid import UUID
 from src.service.document_service import DocumentService
 from src.service.remittance_service import RemittanceService
+from src.service.recipient_service import RecipientService
 from src.service.client_service import ClientService
 from src.database.db import session_DP
 from src.repository.client_repository import SqlClientRepository
 from src.repository.document_repository import SqlDocumentRepository
 from src.repository.remittance_repository import SqlRemittanceRepository
-from src.supabase.server import client
+from src.repository.recipient_repository import SqlRecipientRepository
+from src.supabase.server import client, admin_client
 from fastapi import Depends
 from src.external.service.file_storage_service import FileStorageService
 from src.external.repo.file_storage_repo import SupabaseFileStorage
 from src.external.service.geolocation_service import GeolocationService
+from src.external.service.email_service import EmailService
 from src.model.client import Client
-from src.security.dependencies import get_client_service, get_user_id
+from src.exception.exceptions import ResourceNotFoundError
+from src.security.dependencies import get_client_service, get_current_user
 
 # get_client_service fica re-exportado daqui (agora definido em
 # src.security.dependencies, junto com o resto da identidade/autenticação)
@@ -20,7 +25,7 @@ from src.security.dependencies import get_client_service, get_user_id
 
 
 def get_document_service(session : session_DP):
-    file_storage = SupabaseFileStorage(client)
+    file_storage = SupabaseFileStorage(admin_client)
     file_storage_service = FileStorageService(file_storage)
     return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session),file_storage_service)
 
@@ -34,12 +39,49 @@ def get_geolocation_service() -> GeolocationService:
     return _geolocation_service
 
 
-def get_remittance_service(session : session_DP, geolocation_service : GeolocationService = Depends(get_geolocation_service)):
-    return RemittanceService(SqlRemittanceRepository(session), SqlClientRepository(session), SqlDocumentRepository(session), geolocation_service)
+# Idem: EmailService não guarda estado nenhum entre pedidos (a api_key só é lida uma vez do
+# ambiente, ver email_service.py), por isso uma instância partilhada chega.
+_email_service = EmailService()
+
+
+def get_email_service() -> EmailService:
+    return _email_service
+
+
+def get_recipient_service(session : session_DP):
+    return RecipientService(SqlRecipientRepository(session), SqlClientRepository(session))
+
+
+def get_remittance_service(
+    session : session_DP,
+    geolocation_service : GeolocationService = Depends(get_geolocation_service),
+    email_service : EmailService = Depends(get_email_service),
+):
+    return RemittanceService(
+        SqlRemittanceRepository(session),
+        SqlClientRepository(session),
+        SqlDocumentRepository(session),
+        SqlRecipientRepository(session),
+        geolocation_service,
+        email_service,
+    )
 
 
 def get_current_client(
-    user_id = Depends(get_user_id),
+    user = Depends(get_current_user),
     client_service : ClientService = Depends(get_client_service),
 ) -> Client:
-    return client_service.get_by_auth_user_id(user_id)
+    user_id = UUID(str(user.id))
+
+    try:
+        return client_service.get_by_auth_user_id(user_id)
+    except ResourceNotFoundError:
+        # Ainda sem perfil — tenta criar automaticamente a partir dos dados
+        # guardados em user_metadata no signup (ver AuthService.sign_up).
+        # Se não houver metadata suficiente, isto simplesmente relança o
+        # mesmo ResourceNotFoundError de sempre.
+        return client_service.create_from_signup_metadata(
+            auth_user_id=user_id,
+            email=user.email,
+            metadata=user.user_metadata or {},
+        )

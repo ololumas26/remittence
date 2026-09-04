@@ -8,6 +8,7 @@ from alembic import context
 from src.model.remittance import Remittance
 from src.model.client import Client
 from src.model.document import Document
+from src.model.recipient import Recipient
 
 
 from sqlmodel import SQLModel

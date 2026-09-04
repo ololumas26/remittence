@@ -1,36 +1,25 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from src.model.remittance import RemittanceStatus, AllowedCoins
-from src.validator.iban_validator import is_valid_iban 
 
 
 class CreateRemittance(BaseModel):
-    client_id: UUID
+    # Opcional aqui de propósito: o controller sobrepõe sempre com o client_id do utilizador
+    # autenticado (create_remittance.client_id = client.id) — exigir isto no corpo do pedido só
+    # fazia o pedido falhar a validação antes mesmo de chegar ao controller.
+    client_id: UUID | None = None
+    # Já não se recebe nome/IBAN do destinatário em texto livre aqui — o
+    # cliente aponta para um Recipient já guardado (rota /recipient) e o
+    # RemittanceService copia (snapshot) o nome/IBAN dele para a remessa no
+    # momento da submissão.
+    recipient_id: UUID
     amount: Decimal
     source_coin: AllowedCoins
     target_coin: AllowedCoins
-    recipient_name: str
-    recipient_account_iban: str
 
-    @field_validator('recipient_name', 'recipient_account_iban', mode='after')
-    @classmethod
-    def validate_not_blank(cls, value: str):
-        if not value or value.strip() == '':
-            raise ValueError("Este campo não pode estar vazio")
-
-        return value
-
-    @field_validator('recipient_account_iban', mode='after')
-    @classmethod
-    def validate_iban(cls, iban : str):
-
-        if not is_valid_iban(iban):
-            raise ValueError("Iban inválido, use um iban válido")
-
-        return iban
 
 class RemittanceOut(BaseModel):
     """DTO de saída: o que a API expõe sobre uma Remittance."""
@@ -39,6 +28,7 @@ class RemittanceOut(BaseModel):
 
     id: UUID
     client_id: UUID
+    recipient_id: UUID | None
     service_fee_rate: Decimal
     amount: Decimal
     amount_converted: Decimal

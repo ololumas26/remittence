@@ -7,6 +7,7 @@ from src.dto.response import success_response, paginated_response
 from src.dto.filter import DocumentFilterParams
 from src.exception.exceptions import ResourceNotFoundError
 from src.model.client import Client
+from src.security.dependencies import require_staff, Role
 from typing import Annotated
 from src.model.document import DocumentType
 
@@ -96,3 +97,29 @@ def delete(id, client : Client = Depends(get_current_client), document_service :
     _ensure_owner(document_service.get_by_id(id), client)
     document_service.delete(id)
     return success_response(data=None)
+
+
+@document_route.patch("/{id}/approve")
+def approve(
+    id,
+    document_service : DocumentService = Depends(get_document_service),
+    _ : Role = Depends(require_staff),
+):
+    document = document_service.approve(id)
+    return success_response(
+        data=DocumentOut.model_validate(document),
+        message="Documento aprovado",
+    )
+
+
+@document_route.patch("/{id}/reject")
+def reject(
+    id,
+    document_service : DocumentService = Depends(get_document_service),
+    _ : Role = Depends(require_staff),
+):
+    document = document_service.reject(id)
+    return success_response(
+        data=DocumentOut.model_validate(document),
+        message="Documento rejeitado",
+    )

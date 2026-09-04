@@ -9,7 +9,7 @@ from src.database.db import session_DP
 from src.repository.client_repository import SqlClientRepository
 from src.service.client_service import ClientService
 from src.service.auth_service import AuthService
-from src.supabase.server import client
+from src.supabase.server import client, admin_client
 from src.exception.exceptions import AuthenticationError, AuthorizationError
 
 
@@ -27,7 +27,7 @@ def get_client_service(session : session_DP) -> ClientService:
 
 
 def get_auth_service(client_service : ClientService = Depends(get_client_service)) -> AuthService:
-    return AuthService(client, client_service)
+    return AuthService(client, client_service, admin_client)
 
 
 # auto_error=False para nós controlarmos a resposta de erro (mantém o

@@ -32,6 +32,11 @@ class FileUploadError(AppException):
     code = "FILE_UPLOAD_FAILED"
 
 
+class AccountDeletionError(AppException):
+    """Levantada quando a eliminação da conta no Auth externo (Supabase) falha."""
+    code = "ACCOUNT_DELETION_FAILED"
+
+
 class DocumentNotEditableError(AppException):
     """Levantada quando se tenta atualizar um documento que não está expirado nem rejeitado."""
     code = "DOCUMENT_NOT_EDITABLE"
@@ -40,6 +45,12 @@ class DocumentNotEditableError(AppException):
 class DocumentNotDeletableError(AppException):
     """Levantada quando se tenta apagar um documento que já foi avaliado (aprovado ou rejeitado)."""
     code = "DOCUMENT_NOT_DELETABLE"
+
+
+class InvalidDocumentStatusError(AppException):
+    """Levantada quando se tenta transitar um documento (aprovar/rejeitar) a partir de um estado
+    atual que não é 'pendente' — ex: aprovar um documento já rejeitado."""
+    code = "INVALID_DOCUMENT_STATUS"
 
 
 class ClientNotVerifiedError(AppException):

@@ -55,7 +55,9 @@ class SqlRemittanceRepository():
         order_column = getattr(Remittance, order_by)
         statement = select(Remittance)
         statement = self._apply_filters(statement, client_id, status, created_from, created_to)
-        statement = statement.order_by(order_column).limit(limit).offset(offset)
+        # .desc() sempre — quem lista remessas/documentos/destinatários quer sempre o mais
+        # recente primeiro, nunca o mais antigo.
+        statement = statement.order_by(order_column.desc()).limit(limit).offset(offset)
 
         return self.db.exec(statement).all()
 
