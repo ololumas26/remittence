@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from supabase import Client
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 import io
 from src.supabase.server import supabase_url
 from uuid import uuid4
@@ -40,7 +41,11 @@ class SupabaseFileStorage(FileStorage):
         path = f'{client_id}/{uuid4()}.{extension}'
 
         try:
-            response = self.supabase_client.storage.from_(self.BUCKET_NAME).upload(path, input_file.getvalue())
+            response = await run_in_threadpool(
+                self.supabase_client.storage.from_(self.BUCKET_NAME).upload,
+                path,
+                input_file.getvalue(),
+            )
             return self._build_absolut_path(response.full_path)
 
         except Exception as e:

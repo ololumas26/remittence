@@ -32,6 +32,14 @@ class FileUploadError(AppException):
     code = "FILE_UPLOAD_FAILED"
 
 
+class InvalidFileError(AppException):
+    """Levantada quando um ficheiro submetido não passa a validação: extensão não permitida,
+    conteúdo que não corresponde ao formato indicado pela extensão (magic bytes), ou tamanho
+    acima do limite permitido. Distinta de FileUploadError, que é para uma falha do storage
+    externo, não do próprio ficheiro."""
+    code = "INVALID_FILE"
+
+
 class AccountDeletionError(AppException):
     """Levantada quando a eliminação da conta no Auth externo (Supabase) falha."""
     code = "ACCOUNT_DELETION_FAILED"
