@@ -6,13 +6,15 @@ from src.service.payment_service import PaymentService
 from src.dto.payment_dto import CreatePayment
 from src.model.client import Client
 
-
+from src.database.db import session_DP
+from sqlmodel import Session
 payment_route = APIRouter(prefix=f'{APP_PREFIX}/payment', tags=['payment'])
 
 
 @payment_route.post('/')
 @limiter.limit("5/minute")
 def submit(
+    request : Request,
     create_payment : CreatePayment,
     client : Client = Depends(get_current_client),
     payment_service : PaymentService = Depends(get_payment_service)
