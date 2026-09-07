@@ -45,7 +45,7 @@ class CreateClient(ClientBase):
 class UpdateClient(ClientBase):
     birth_date : date | None = None
     name : str | None
-    email : str | None
+    email : str | None = None
     phone_number : str | None
 
 class ClientOut(BaseModel):

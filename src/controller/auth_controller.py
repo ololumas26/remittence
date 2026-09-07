@@ -53,7 +53,7 @@ def get_session_identity(request: Request, user = Depends(get_current_user)):
     metadata = user.user_metadata or {}
     name = metadata.get("full_name") or metadata.get("name")
     identity = SessionIdentityOut(email=user.email, name=name)
-    return success_response(data=identity)
+    return "Rota para submissão da foto" #success_response(data=identity)
 
 
 @auth_route.post("/forgot-password")

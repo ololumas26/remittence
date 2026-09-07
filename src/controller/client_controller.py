@@ -90,7 +90,8 @@ async def update_my_photo(
     client : Client = Depends(get_current_client),
     client_service : ClientService = Depends(get_client_service),
 ):
-    updated_client = await client_service.update_photo(str(client.id), file)
+
+    updated_client = await client_service.update_photo(str('0201a4b9d85943edab9912a61d705cc9'), file)
     return success_response(
         data=ClientOut.model_validate(updated_client),
         message="Foto de perfil atualizada com sucesso",

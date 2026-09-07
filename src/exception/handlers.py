@@ -74,8 +74,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     message = f"{field}: {first_error['msg']}" if field else first_error['msg']
 
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=error_response(error="VALIDATION_ERROR", message=message),
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content=error_response(error="VALIDATION_ERROR", message=str(exc)),
     )
 
 

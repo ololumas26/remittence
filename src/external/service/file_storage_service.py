@@ -61,7 +61,7 @@ class FileStorageService:
                 "O conteúdo do ficheiro não corresponde ao formato indicado pela extensão."
             )
 
-    async def execute(self, file : UploadFile, client_id):
+    async def execute(self, file : UploadFile, client_id, bucket_name : str = ''):
 
         extension = self._ensure_has_allowed_extension(filename=file.filename)
 
