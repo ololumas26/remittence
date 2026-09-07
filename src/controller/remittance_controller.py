@@ -10,6 +10,7 @@ from src.exception.exceptions import ResourceNotFoundError
 from src.model.client import Client
 from src.security.client_ip import get_client_ip
 from src.security.dependencies import require_staff, Role
+from src.security.rate_limit import limiter
 
 remittance_route = APIRouter(prefix=f'{APP_PREFIX}/remittance', tags=['remittances'])
 
@@ -21,6 +22,7 @@ def _ensure_owner(remittance, client : Client):
         raise ResourceNotFoundError(f"Remessa com id {remittance.id} não encontrada")
 
 @remittance_route.post("/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 def submit(
     create_remittance : CreateRemittance,
     request : Request,
@@ -39,7 +41,9 @@ def submit(
 
 
 @remittance_route.patch("/{id}/send")
+@limiter.limit("30/minute")
 def mark_as_sent(
+    request : Request,
     id,
     remittance_service : RemittanceService = Depends(get_remittance_service),
     _ : Role = Depends(require_staff),
@@ -52,7 +56,9 @@ def mark_as_sent(
 
 
 @remittance_route.patch("/{id}/reject")
+@limiter.limit("30/minute")
 def mark_as_rejected(
+    request : Request,
     id,
     remittance_service : RemittanceService = Depends(get_remittance_service),
     _ : Role = Depends(require_staff),
@@ -65,7 +71,9 @@ def mark_as_rejected(
 
 
 @remittance_route.get("/{id}", status_code=status.HTTP_200_OK)
+@limiter.limit("30/minute")
 def get_remittance(
+    request : Request,
     id,
     client : Client = Depends(get_current_client),
     remittance_service : RemittanceService = Depends(get_remittance_service),
@@ -78,7 +86,9 @@ def get_remittance(
 
 
 @remittance_route.get("/")
+@limiter.limit("30/minute")
 def get_all(
+    request : Request,
     filter : Annotated[RemittanceFilterParams, Query()],
     client : Client = Depends(get_current_client),
     remittance_service : RemittanceService = Depends(get_remittance_service),
