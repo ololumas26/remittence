@@ -22,4 +22,5 @@ class Client(SQLModel, table = True):
 
     document : list['Document'] = Relationship(back_populates='client', cascade_delete=True)
     remittance : list['Remittance'] = Relationship(back_populates='client')
+    payment : list['Payment'] = Relationship(back_populates='client')
     recipient : list['Recipient'] = Relationship(back_populates='client', cascade_delete=True)

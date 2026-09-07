@@ -11,10 +11,15 @@ from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date, get_18_year_date
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
-from src.service.remittance_email_template import remittance_created_subject, render_remittance_created_email
+from src.service.remittance_email_template import (
+    remittance_created_subject,
+    render_remittance_created_email,
+    remittance_sent_subject,
+    render_remittance_sent_email,
+)
 from src.external.service.geolocation_service import GeolocationService
 from src.external.service.email_service import EmailService
-from src.constant.app_constant import MIN_AMOUNT, EXCHANGE_RATE, SERVICE_FEE_RATE, ALLOWED_COUNTRIES
+from src.constant.app_constant import MIN_AMOUNT, MAX_AMOUNT, EXCHANGE_RATE, SERVICE_FEE_RATE, ALLOWED_COUNTRIES
 from src.exception.exceptions import (
     ResourceNotFoundError,
     ClientNotVerifiedError,
@@ -111,7 +116,14 @@ class RemittanceService:
         return recipient
 
 
-    def submit(self, create_remittance : CreateRemittance, ip_address : str = "") -> Remittance:
+    def build_remittance(self, create_remittance : CreateRemittance, ip_address : str = "") -> tuple[Remittance, Client]:
+        """
+        Faz toda a validação e constrói o Remittance em memória — sem o gravar. Separado de
+        submit() para o PaymentService conseguir construir a remessa, entregá-la (ainda por
+        gravar) ao PaymentTransactionRepository junto com o Payment, e deixar esse repositório
+        gravar os dois numa única transação. submit() continua a existir tal como antes (grava
+        sozinho) para a rota direta POST /remittance, que não passa por nenhum pagamento.
+        """
 
         client = self.client_repo.get_by_id(create_remittance.client_id)
 
@@ -128,6 +140,9 @@ class RemittanceService:
 
         if create_remittance.amount < MIN_AMOUNT:
             raise InvalidAmountError(f"O valor mínimo permitido por remessa é {MIN_AMOUNT}")
+
+        if create_remittance.amount > MAX_AMOUNT:
+            raise InvalidAmountError(f"O valor máximo permitido por remessa é {MAX_AMOUNT}")
 
         if create_remittance.source_coin == create_remittance.target_coin:
             raise SameCurrencyError("A moeda de origem e a moeda de destino não podem ser iguais")
@@ -151,14 +166,21 @@ class RemittanceService:
             ip_address=ip_address or None,
         )
 
+        return remittance, client
+
+
+    def submit(self, create_remittance : CreateRemittance, ip_address : str = "") -> Remittance:
+
+        remittance, client = self.build_remittance(create_remittance, ip_address)
+
         saved_remittance = self.remittance_repo.save(remittance)
 
-        self._send_remittance_created_email(client, saved_remittance)
+        self.send_created_email(client, saved_remittance)
 
         return saved_remittance
 
 
-    def _send_remittance_created_email(self, client : Client, remittance : Remittance) -> None:
+    def send_created_email(self, client : Client, remittance : Remittance) -> None:
         # EmailService.send já não levanta exceção nenhuma (ver lá) — este try/except é só uma
         # segunda rede de segurança para uma falha imprevista a MONTAR o email (ex: um valor
         # None inesperado), para nunca deixar a submissão da remessa em si falhar por causa da
@@ -166,9 +188,22 @@ class RemittanceService:
         try:
             subject = remittance_created_subject(remittance)
             html = render_remittance_created_email(client.name, remittance)
-            self.email_service.send(client.email, subject, html)
+            # TODO: SUBSTITUIR DEPOIS PARA O EMAIL DO CLIENTE QUANDO JÁ ESTIVER EM PRODUÇÃO
+            self.email_service.send('ololumas26@gmail.com', subject, html)
         except Exception:
             logger.exception("Falha ao preparar o email de remessa criada para a remessa %s", remittance.id)
+
+
+    def send_sent_email(self, client : Client, remittance : Remittance) -> None:
+        # Mesma rede de segurança de send_created_email acima — uma falha a montar/enviar este
+        # email nunca deve impedir mark_as_sent de ter marcado a remessa como enviada com sucesso.
+        try:
+            subject = remittance_sent_subject(remittance)
+            html = render_remittance_sent_email(client.name, remittance)
+            # TODO: SUBSTITUIR DEPOIS PARA O EMAIL DO CLIENTE QUANDO JÁ ESTIVER EM PRODUÇÃO
+            self.email_service.send('ololumas26@gmail.com', subject, html)
+        except Exception:
+            logger.exception("Falha ao preparar o email de remessa enviada para a remessa %s", remittance.id)
 
 
     def _transition_status(self, remittance_id : str, new_status : RemittanceStatus):
@@ -193,7 +228,21 @@ class RemittanceService:
     def mark_as_sent(self, remittance_id : str) -> Remittance:
 
         remittance = self._transition_status(remittance_id, RemittanceStatus.SENT)
-        return self.remittance_repo.save(remittance)
+        saved_remittance = self.remittance_repo.save(remittance)
+
+        # _transition_status já confirmou que a remessa existe, mas não devolve o cliente — vamos
+        # buscá-lo só agora, e só para o email (get_by_id devolve None em vez de levantar, mas
+        # isto nunca deveria acontecer: uma remessa sempre teve um client_id válido na submissão).
+        client = self.client_repo.get_by_id(saved_remittance.client_id)
+        if client:
+            self.send_sent_email(client, saved_remittance)
+        else:
+            logger.error(
+                "Remessa %s marcada como enviada mas o cliente %s já não existe — email não enviado",
+                saved_remittance.id, saved_remittance.client_id,
+            )
+
+        return saved_remittance
 
 
     def mark_as_rejected(self, remittance_id : str):

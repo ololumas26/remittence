@@ -27,3 +27,4 @@ def get_db_session():
 
 
 session_DP = Annotated[Session, Depends(get_db_session)]
+
