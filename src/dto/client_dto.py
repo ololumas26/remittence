@@ -59,5 +59,6 @@ class ClientOut(BaseModel):
     email : str
     phone_number : str | None
     birth_date : date
+    image_url : str | None
     created_at : datetime
     updated_at : datetime | None

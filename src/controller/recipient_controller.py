@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from typing import Annotated
 from src.constant.app_constant import APP_PREFIX
 from src.dto.recipient_dto import CreateRecipient, UpdateRecipient, RecipientOut
 from src.dto.filter import RecipientFilterParams
 from src.controller.dependency import get_recipient_service, get_current_client
+from src.security.rate_limit import limiter
 from src.service.recipient_service import RecipientService
 from src.dto.response import success_response, paginated_response
 from src.exception.exceptions import ResourceNotFoundError
@@ -20,7 +21,9 @@ def _ensure_owner(recipient, client : Client):
 
 
 @recipient_route.post("/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 def create(
+    request : Request,
     create_recipient : CreateRecipient,
     client : Client = Depends(get_current_client),
     recipient_service : RecipientService = Depends(get_recipient_service),
@@ -36,7 +39,9 @@ def create(
 
 
 @recipient_route.get("/")
+@limiter.limit("30/minute")
 def get_all(
+    request : Request,
     filter : Annotated[RecipientFilterParams, Query()],
     client : Client = Depends(get_current_client),
     recipient_service : RecipientService = Depends(get_recipient_service),
@@ -51,7 +56,9 @@ def get_all(
 
 
 @recipient_route.get("/{id}")
+@limiter.limit("30/minute")
 def get(
+    request : Request,
     id,
     client : Client = Depends(get_current_client),
     recipient_service : RecipientService = Depends(get_recipient_service),
@@ -62,7 +69,9 @@ def get(
 
 
 @recipient_route.put("/{id}")
+@limiter.limit("10/minute")
 def update(
+    request : Request,
     id,
     update_recipient : UpdateRecipient,
     client : Client = Depends(get_current_client),
@@ -77,7 +86,9 @@ def update(
 
 
 @recipient_route.delete("/{id}")
+@limiter.limit("10/minute")
 def delete(
+    request : Request,
     id,
     client : Client = Depends(get_current_client),
     recipient_service : RecipientService = Depends(get_recipient_service),

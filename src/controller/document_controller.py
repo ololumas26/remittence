@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, Query, status, UploadFile, Form
+from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, Form
 from src.constant.app_constant import APP_PREFIX
 from src.dto.document_dto import CreateDocument, UpdateDocument, DocumentOut
 from src.controller.dependency import get_document_service, get_current_client
+from src.security.rate_limit import limiter
 from src.service.document_service import DocumentService
 from src.dto.response import success_response, paginated_response
 from src.dto.filter import DocumentFilterParams
@@ -25,7 +26,9 @@ def _ensure_owner(document, client : Client):
 
 
 @document_route.post("/", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def submit(
+    request : Request,
     document_type : Annotated[DocumentType, Form()],
     document_number : Annotated[str, Form()],
     expiration_date : Annotated[date, Form()],
@@ -47,7 +50,9 @@ async def submit(
 
 
 @document_route.get("/")
+@limiter.limit("30/minute")
 def get_all(
+    request : Request,
     filter : Annotated[DocumentFilterParams, Query()],
     client : Client = Depends(get_current_client),
     document_service : DocumentService = Depends(get_document_service),
@@ -62,14 +67,17 @@ def get_all(
 
 
 @document_route.get("/{id}")
-def get(id, client : Client = Depends(get_current_client), document_service : DocumentService = Depends(get_document_service)):
+@limiter.limit("30/minute")
+def get(request : Request, id, client : Client = Depends(get_current_client), document_service : DocumentService = Depends(get_document_service)):
     document = document_service.get_by_id(id)
     _ensure_owner(document, client)
     return success_response(data=DocumentOut.model_validate(document))
 
 
 @document_route.put("/{id}")
+@limiter.limit("5/minute")
 async def update(
+    request : Request,
     id,
     file : UploadFile,
     document_type : Annotated[DocumentType | None, Form()] = None,
@@ -93,14 +101,17 @@ async def update(
 
 
 @document_route.delete("/{id}")
-def delete(id, client : Client = Depends(get_current_client), document_service : DocumentService = Depends(get_document_service)):
+@limiter.limit("10/minute")
+def delete(request : Request, id, client : Client = Depends(get_current_client), document_service : DocumentService = Depends(get_document_service)):
     _ensure_owner(document_service.get_by_id(id), client)
     document_service.delete(id)
     return success_response(data=None)
 
 
 @document_route.patch("/{id}/approve")
+@limiter.limit("30/minute")
 def approve(
+    request : Request,
     id,
     document_service : DocumentService = Depends(get_document_service),
     _ : Role = Depends(require_staff),
@@ -113,7 +124,9 @@ def approve(
 
 
 @document_route.patch("/{id}/reject")
+@limiter.limit("30/minute")
 def reject(
+    request : Request,
     id,
     document_service : DocumentService = Depends(get_document_service),
     _ : Role = Depends(require_staff),

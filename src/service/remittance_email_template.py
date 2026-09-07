@@ -35,6 +35,11 @@ def remittance_created_subject(remittance: Remittance) -> str:
     return f"Pedido de remessa criado — {amount} {coin}"
 
 
+def remittance_sent_subject(remittance: Remittance) -> str:
+    reference = str(remittance.id)[:8].upper()
+    return f"A tua remessa {reference} foi enviada"
+
+
 def render_remittance_created_email(client_name: str, remittance: Remittance) -> str:
     """
     HTML do email enviado assim que uma remessa é submetida (ver RemittanceService.submit) — um
@@ -87,6 +92,39 @@ def render_remittance_created_email(client_name: str, remittance: Remittance) ->
           <p style="color:#60646C;font-size:13px;margin:20px 0 0;">
             Vamos avisar-te assim que o estado mudar. Podes acompanhar esta remessa a qualquer
             momento no histórico da app.
+          </p>
+        </div>
+      </div>
+      <p style="color:#9A9AA0;font-size:12px;text-align:center;margin-top:16px;">
+        Este é um email automático — não é preciso responder.
+      </p>
+    </div>
+    """
+
+
+def render_remittance_sent_email(client_name: str, remittance: Remittance) -> str:
+    """
+    HTML do email enviado quando uma remessa passa a SENT (ver RemittanceService.mark_as_sent)
+    — cumpre a promessa feita no email de criação ("Vamos avisar-te assim que o estado mudar"),
+    que até agora não tinha nenhum envio real associado a essa transição.
+    """
+    reference = str(remittance.id)[:8].upper()
+    target_label = _COIN_LABELS[remittance.target_coin]
+
+    return f"""
+    <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;background:#F6F5FA;padding:32px 16px;">
+      <div style="max-width:480px;margin:0 auto;background:#FFFFFF;border-radius:20px;overflow:hidden;">
+        <div style="background:#5B4B9E;padding:24px;text-align:center;">
+          <span style="color:#FFFFFF;font-size:18px;font-weight:700;">Sentchu</span>
+        </div>
+        <div style="padding:24px;">
+          <p style="color:#000000;font-size:16px;margin:0 0 4px;">Olá, {client_name}.</p>
+          <p style="color:#60646C;font-size:14px;margin:0 0 20px;">
+            Boas notícias — a tua remessa <strong>{reference}</strong> foi enviada. O destinatário
+            deve receber {_format_amount(remittance.amount_converted)} {target_label} em breve.
+          </p>
+          <p style="color:#60646C;font-size:13px;margin:20px 0 0;">
+            Podes acompanhar os detalhes a qualquer momento no histórico da app.
           </p>
         </div>
       </div>

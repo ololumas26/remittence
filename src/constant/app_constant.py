@@ -3,6 +3,7 @@ from decimal import Decimal
 APP_PREFIX = '/api/v1'
 MAJOR_AGE = 18
 MIN_AMOUNT = 50
+MAX_AMOUNT = 200
 
 # TODO: valores temporários (1:1, sem taxas) — substituir pelos valores reais
 # assim que houver uma fonte confiável (config do parceiro bancário ou API de câmbio).

@@ -9,7 +9,12 @@ load_dotenv()
 logger = logging.getLogger("remittance")
 
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Sentchu <onboarding@resend.dev>")
+# os.environ.get(key, default) só usa o default quando a chave NÃO EXISTE no ambiente — uma
+# variável presente mas vazia (ex: "RESEND_FROM_EMAIL=" no .env, sem valor a seguir ao "=") conta
+# como existente, com valor "". Foi exatamente isto que aconteceu: o Resend recebia from="" e
+# respondia "The domain is invalid" (uma string vazia não tem domínio nenhum). O `or` aqui cobre
+# os dois casos — chave ausente OU vazia — caindo sempre no endereço de sandbox do Resend.
+RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL") or "Sentchu <onboarding@resend.dev>"
 
 
 class EmailService:
@@ -33,6 +38,7 @@ class EmailService:
             resend.api_key = self.api_key
             resend.Emails.send({
                 "from": self.from_email,
+                # Subbstituir para o email real do cliente depois que configurar o SMTP do resend
                 "to": [to],
                 "subject": subject,
                 "html": html,

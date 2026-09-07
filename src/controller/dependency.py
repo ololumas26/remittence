@@ -8,6 +8,7 @@ from src.repository.client_repository import SqlClientRepository
 from src.repository.document_repository import SqlDocumentRepository
 from src.repository.remittance_repository import SqlRemittanceRepository
 from src.repository.recipient_repository import SqlRecipientRepository
+from src.repository.payment_transaction_repository import SqlPaymentTransactionRepository
 from src.supabase.server import client, admin_client
 from fastapi import Depends
 from src.external.service.file_storage_service import FileStorageService
@@ -17,6 +18,9 @@ from src.external.service.email_service import EmailService
 from src.model.client import Client
 from src.exception.exceptions import ResourceNotFoundError
 from src.security.dependencies import get_client_service, get_current_user
+from src.service.payment_service import PaymentService
+
+
 
 # get_client_service fica re-exportado daqui (agora definido em
 # src.security.dependencies, junto com o resto da identidade/autenticação)
@@ -85,3 +89,11 @@ def get_current_client(
             email=user.email,
             metadata=user.user_metadata or {},
         )
+
+
+def get_payment_service(
+    session : session_DP,
+    remittance_service : RemittanceService = Depends(get_remittance_service),
+):
+    payment_transaction_repository = SqlPaymentTransactionRepository(session)
+    return PaymentService(remittance_service, payment_transaction_repository)

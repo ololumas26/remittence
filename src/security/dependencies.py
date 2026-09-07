@@ -10,7 +10,17 @@ from src.repository.client_repository import SqlClientRepository
 from src.service.client_service import ClientService
 from src.service.auth_service import AuthService
 from src.supabase.server import client, admin_client
+from src.external.repo.file_storage_repo import SupabaseFileStorage
+from src.external.service.file_storage_service import FileStorageService
 from src.exception.exceptions import AuthenticationError, AuthorizationError
+
+
+# Bucket próprio para fotos de perfil, separado do dos documentos de KYC ('product_images', ver
+# get_document_service) — só imagens (sem PDF) e um limite de tamanho mais apertado, adequado a
+# uma foto de perfil em vez de um scan de documento.
+CLIENT_AVATAR_BUCKET = 'client_avatars'
+CLIENT_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
+CLIENT_AVATAR_ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg']
 
 
 class Role(str, Enum):
@@ -23,7 +33,13 @@ class Role(str, Enum):
 
 
 def get_client_service(session : session_DP) -> ClientService:
-    return ClientService(SqlClientRepository(session))
+    avatar_storage = SupabaseFileStorage(admin_client, bucket_name=CLIENT_AVATAR_BUCKET)
+    avatar_storage_service = FileStorageService(
+        avatar_storage,
+        allowed_extensions=CLIENT_AVATAR_ALLOWED_EXTENSIONS,
+        max_size_bytes=CLIENT_AVATAR_MAX_SIZE_BYTES,
+    )
+    return ClientService(SqlClientRepository(session), avatar_storage_service)
 
 
 def get_auth_service(client_service : ClientService = Depends(get_client_service)) -> AuthService:

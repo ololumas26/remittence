@@ -1,9 +1,10 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from src.model.remittance import RemittanceStatus, AllowedCoins
+from src.model.payment_method import PaymentMethod
 
 
 class CreateRemittance(BaseModel):
@@ -16,9 +17,14 @@ class CreateRemittance(BaseModel):
     # RemittanceService copia (snapshot) o nome/IBAN dele para a remessa no
     # momento da submissão.
     recipient_id: UUID
-    amount: Decimal
+    amount: Decimal = Field(ge=50)
     source_coin: AllowedCoins
     target_coin: AllowedCoins
+    # Só diz COMO o cliente quer pagar — não decide nada sozinho sobre o pagamento em si (isso
+    # fica com o Payment/PaymentService, ver docs/decisions). Este DTO passa a ser recebido
+    # embrulhado dentro de CreatePayment (ver payment_dto.py), não mais diretamente na rota
+    # POST /remittance.
+    payment_method: PaymentMethod
 
 
 class RemittanceOut(BaseModel):

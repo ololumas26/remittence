@@ -5,3 +5,4 @@ venv/
 *.db
 .env
 *.mmdb
+.DS_Store

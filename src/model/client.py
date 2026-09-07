@@ -17,9 +17,14 @@ class Client(SQLModel, table = True):
     # nullable para não partir dados já existentes sem conta associada, mas
     # o fluxo de criação (ClientService.create) passa sempre a preenchê-lo.
     auth_user_id : uuid.UUID | None = Field(nullable=True, unique=True, index=True, default=None)
+    # URL pública da foto de perfil no Supabase Storage (bucket separado dos documentos de KYC —
+    # ver get_client_service). Nullable: sem foto, o frontend mostra as iniciais do nome em vez
+    # disto (ver ClientOut.image_url e derive-initials.ts no frontend).
+    image_url : str | None = Field(nullable=True, default=None)
     created_at : datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at : datetime = Field(default=None, nullable=True, sa_type=DateTime)
 
     document : list['Document'] = Relationship(back_populates='client', cascade_delete=True)
     remittance : list['Remittance'] = Relationship(back_populates='client')
+    payment : list['Payment'] = Relationship(back_populates='client')
     recipient : list['Recipient'] = Relationship(back_populates='client', cascade_delete=True)
