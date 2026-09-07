@@ -25,22 +25,32 @@ class FileStorageService:
         'pdf': (b'%PDF-',),
     }
 
-    def __init__(self, supabase_file_storage : SupabaseFileStorage):
+    def __init__(
+        self,
+        supabase_file_storage : SupabaseFileStorage,
+        allowed_extensions : list[str] | None = None,
+        max_size_bytes : int | None = None,
+    ):
         self.supabase_file_storage = supabase_file_storage
+        # Omitidos no construtor, caem nos valores por omissão da classe (documentos de KYC —
+        # ver get_document_service). Uma foto de perfil, por exemplo, é construída com os seus
+        # próprios limites (só imagens, ficheiro mais pequeno — ver get_client_service).
+        self.allowed_extensions = allowed_extensions or self.ALLOWED_FILE_EXTENSION
+        self.max_size_bytes = max_size_bytes or self.MAX_FILE_SIZE_BYTES
 
     def _ensure_has_allowed_extension(self, filename : str) -> str:
         extension = filename.split('.')[-1].lower()
 
-        if extension not in self.ALLOWED_FILE_EXTENSION:
+        if extension not in self.allowed_extensions:
             raise InvalidFileError(
-                f"Formato do ficheiro incorreto, formatos permitidos: {self.ALLOWED_FILE_EXTENSION}"
+                f"Formato do ficheiro incorreto, formatos permitidos: {self.allowed_extensions}"
             )
 
         return extension
 
     def _ensure_within_size_limit(self, content : bytes):
-        if len(content) > self.MAX_FILE_SIZE_BYTES:
-            max_mb = self.MAX_FILE_SIZE_BYTES // (1024 * 1024)
+        if len(content) > self.max_size_bytes:
+            max_mb = self.max_size_bytes // (1024 * 1024)
             raise InvalidFileError(f"O ficheiro excede o tamanho máximo permitido de {max_mb}MB.")
 
     def _ensure_matches_signature(self, content : bytes, extension : str):

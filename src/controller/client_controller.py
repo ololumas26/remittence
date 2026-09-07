@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, UploadFile, status
 from src.constant.app_constant import APP_PREFIX
 from src.dto.client_dto import CreateClient, UpdateClient, ClientOut
 from src.security.dependencies import get_client_service, get_current_user, require_staff, Role, get_auth_service
@@ -80,3 +80,29 @@ def update_me(
 @limiter.limit("30/minute")
 def get_me(request : Request, client : Client = Depends(get_current_client)):
     return success_response(data=ClientOut.model_validate(client))
+
+
+@client_route.put("/me/photo")
+@limiter.limit("5/minute")
+async def update_my_photo(
+    request : Request,
+    file : UploadFile,
+    client : Client = Depends(get_current_client),
+    client_service : ClientService = Depends(get_client_service),
+):
+    updated_client = await client_service.update_photo(str(client.id), file)
+    return success_response(
+        data=ClientOut.model_validate(updated_client),
+        message="Foto de perfil atualizada com sucesso",
+    )
+
+
+@client_route.delete("/me/photo")
+@limiter.limit("5/minute")
+def delete_my_photo(
+    request : Request,
+    client : Client = Depends(get_current_client),
+    client_service : ClientService = Depends(get_client_service),
+):
+    updated_client = client_service.remove_photo(str(client.id))
+    return success_response(data=ClientOut.model_validate(updated_client))
