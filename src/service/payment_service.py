@@ -28,6 +28,7 @@ class ProcessarPagamento(ABC):
 
 
 class Mbway(ProcessarPagamento):
+
     method = 'mbway'
 
     def __init__(self, gateway: StripeMbwayGateway | None = None):
@@ -51,7 +52,9 @@ class Mbway(ProcessarPagamento):
 
 
 class CreditDebitCard(ProcessarPagamento):
+
     method = 'credit_debit'
+    
     def execute(self, payment: Payment, create_payment: CreatePayment) -> str:
         """Chamar a stripe e processar o pagamwnto por cartão de crédito ou débito"""
         print("Executando pagamento por cartão")
@@ -121,10 +124,15 @@ class PaymentService:
 
         event = self.mbway_gateway.verify_webhook(payload, signature)
 
+        # event["data"]["object"] vem como um stripe.PaymentIntent (StripeObject), não um dict
+        # — a partir do stripe-python v15, StripeObject já não suporta .get()/[] como um dict
+        # (levanta AttributeError a apontar para isto mesmo). .to_dict() converte-o (e tudo lá
+        # dentro, incluindo last_payment_error) para dicts/valores simples, que é o que
+        # _confirm_payment/_fail_payment esperam receber.
         if event["type"] == EVENT_PAYMENT_SUCCEEDED:
-            self._confirm_payment(event["data"]["object"])
+            self._confirm_payment(event["data"]["object"].to_dict())
         elif event["type"] == EVENT_PAYMENT_FAILED:
-            self._fail_payment(event["data"]["object"])
+            self._fail_payment(event["data"]["object"].to_dict())
 
     def _get_payment_for_callback(self, payment_intent: dict) -> Payment:
         provider_reference = payment_intent.get("id")
