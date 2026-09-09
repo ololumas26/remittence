@@ -8,6 +8,7 @@ from src.model.client import Client
 
 from src.database.db import session_DP
 from sqlmodel import Session
+from src.security.client_ip import get_client_ip
 payment_route = APIRouter(prefix=f'{APP_PREFIX}/payment', tags=['payment'])
 
 
@@ -23,5 +24,5 @@ def submit(
     # submeter remessas em seu próprio nome — ignora/sobrepõe qualquer client_id vindo do corpo
     # do pedido (agora aninhado em create_payment.remittance, não mais direto no corpo).
     create_payment.remittance.client_id = client.id
-    payment_service.execute_payment(create_payment)
+    payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
     return "Rota de pagamento"
