@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Request, status
 from typing import Annotated
 from src.constant.app_constant import APP_PREFIX
-from src.dto.remittance_dto import CreateRemittance, RemittanceOut
+from src.dto.remittance_dto import RemittanceOut
 from src.dto.filter import RemittanceFilterParams
 from src.controller.dependency import get_remittance_service, get_current_client
 from src.service.remittance_service import RemittanceService
@@ -21,23 +21,11 @@ def _ensure_owner(remittance, client : Client):
     if remittance.client_id != client.id:
         raise ResourceNotFoundError(f"Remessa com id {remittance.id} não encontrada")
 
-@remittance_route.post("/", status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
-def submit(
-    create_remittance : CreateRemittance,
-    request : Request,
-    client : Client = Depends(get_current_client),
-    remittance_service : RemittanceService = Depends(get_remittance_service),
-):
-    # Um cliente só pode submeter remessas em seu próprio nome — ignora/sobrpõe
-    # qualquer client_id vindo no corpo do pedido.
-    create_remittance.client_id = client.id
-    ip_address = get_client_ip(request)
-    remittance = remittance_service.submit(create_remittance, ip_address=ip_address)
-    return success_response(
-        data=RemittanceOut.model_validate(remittance),
-        message="Remessa submetida com sucesso",
-    )
+# Já não há POST "/" aqui: criar uma remessa sem pagamento associado ficou proibido quando a
+# rota de pagamento (POST /payment/, ver payment_controller.py) passou a ser o único sítio onde
+# um cliente consegue submeter uma remessa — chamar RemittanceService.submit() diretamente
+# (como este endpoint fazia) deixava criar remessas com payment_id nulo, ou seja, "grátis". O
+# método RemittanceService.submit() em si ainda existe mas já não tem nenhum utilizador.
 
 
 @remittance_route.patch("/{id}/send")
