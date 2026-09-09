@@ -50,6 +50,8 @@ class Remittance(SQLModel, table = True):
     exchange_rate : Decimal = Field(nullable=False, sa_type=Numeric(10,2))
     recipient_name : str = Field(nullable=False, max_length=100)
     recipient_account_iban : str = Field(nullable=False, max_length=35)
+    # Snapshot do banco escolhido no destinatário, tal como o nome e o IBAN acima.
+    recipient_bank_code : str | None = Field(nullable=True, max_length=4, default=None)
     status : RemittanceStatus = Field(default=RemittanceStatus.IN_PROGRESS, nullable=False)
     ip_address : str | None = Field(nullable=True, max_length=45, default=None)
     created_at : datetime = Field(default_factory=lambda : datetime.now(timezone.utc))

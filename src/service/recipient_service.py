@@ -3,7 +3,8 @@ from src.model.repo.client_repo import ClientRepository
 from src.dto.recipient_dto import CreateRecipient, UpdateRecipient
 from src.dto.filter import RecipientFilterParams
 from src.model.recipient import Recipient
-from src.exception.exceptions import ResourceNotFoundError, InvalidIdentifierError
+from src.exception.exceptions import InvalidIdentifierError, InvalidRecipientBankError, ResourceNotFoundError
+from src.validator.iban_validator import clean_iban, get_bank_code
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -29,6 +30,11 @@ class RecipientService:
 
         recipient = self._get_or_raise(recipient_id)
         changes = update_recipient.model_dump(exclude_unset=True)
+
+        resulting_iban = changes.get('account_iban', recipient.account_iban)
+        resulting_bank_code = changes.get('bank_code', recipient.bank_code)
+        if resulting_bank_code is not None and get_bank_code(clean_iban(resulting_iban)) != resulting_bank_code:
+            raise InvalidRecipientBankError("O banco selecionado não corresponde ao IBAN")
 
         for key, value in changes.items():
             if value is not None:
