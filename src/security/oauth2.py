@@ -20,5 +20,4 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{APP_PREFIX}/auth/login")
 def get_user(token : str = Depends(oauth2_scheme)):
 
     user = client.auth.get_user(token)
-    print("Dados do usuário: ", user)
-    # print("Chegou o token aqui: ", token)
+    # Nunca registar o objeto User nem o token: podem conter PII e credenciais.

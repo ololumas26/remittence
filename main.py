@@ -12,6 +12,7 @@ from src.controller.document_controller import document_route
 from src.controller.recipient_controller import recipient_route
 from src.controller.remittance_controller import remittance_route
 from src.controller.payment_controller import payment_route
+from src.controller.notification_controller import notification_route
 from src.exception.handlers import register_exception_handlers
 
 
@@ -37,8 +38,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 app.state.limiter = limiter
@@ -50,7 +51,8 @@ routes = [
     document_route,
     recipient_route,
     remittance_route,
-    payment_route
+    payment_route,
+    notification_route,
 ]
 
 for route in routes:

@@ -3,6 +3,7 @@ from sqlmodel import Session, select, func
 from src.model.remittance import Remittance, RemittanceStatus
 from sqlalchemy import update
 from src.model.payment import Payment, PaymentStatus
+from src.model.notification import Notification
 from uuid import UUID
 from datetime import date, datetime, time, timezone, timedelta
 
@@ -56,6 +57,24 @@ class SqlRemittanceRepository():
 
         # Reload even with expire_on_commit=False: the identity map may hold the old state.
         remittance = self.db.get(Remittance, updated_id)
+        self.db.refresh(remittance)
+        return remittance
+
+    def save_with_notification(
+        self, remittance: Remittance, notification: Notification
+    ) -> Remittance:
+        try:
+            self.db.add(remittance)
+            # Sem uma Relationship ORM entre Notification e Remittance, o unit of work não
+            # garante a ordem dos INSERTs só porque existe uma FK na tabela. O flush mantém a
+            # mesma transação, mas materializa primeiro a remessa referenciada.
+            self.db.flush()
+            self.db.add(notification)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
         self.db.refresh(remittance)
         return remittance
 

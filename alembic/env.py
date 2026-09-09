@@ -4,18 +4,24 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
 from alembic import context
+from src.database.connection import get_connection
 
 from src.model.remittance import Remittance
 from src.model.client import Client
 from src.model.document import Document
 from src.model.recipient import Recipient
 from src.model.payment import Payment
+from src.model.notification import Notification
 
 
 from sqlmodel import SQLModel
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+
+# Usa a mesma ligação da aplicação. Sem isto, o Alembic ficava sempre preso ao
+# `sqlite:///remittance.db` do alembic.ini, mesmo quando DATABASE_URL apontava para Postgres.
+config.set_main_option("sqlalchemy.url", get_connection().replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
