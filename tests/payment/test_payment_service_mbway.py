@@ -48,8 +48,8 @@ class FakeGateway:
         self.calls = []
         self.events = []
 
-    def create_checkout_session(self, order_id, amount, success_url, cancel_url):
-        self.calls.append((order_id, amount, success_url, cancel_url))
+    def create_checkout_session(self, order_id, amount, success_url, cancel_url, customer_email=None):
+        self.calls.append((order_id, amount, success_url, cancel_url, customer_email))
         if self.error:
             raise self.error
         return self.checkout_url, self.session_id
@@ -108,7 +108,9 @@ class FakeRemittanceService:
             recipient_account_iban="AO0600000000000000000000",
             recipient_bank_code="006",
         )
-        client = type("Client", (), {"id": create_remittance.client_id, "name": "Cliente Teste"})()
+        client = type(
+            "Client", (), {"id": create_remittance.client_id, "name": "Cliente Teste", "email": "cliente@example.com"}
+        )()
         self.built.append(remittance)
         return remittance, client
 
@@ -158,11 +160,14 @@ def test_execute_payment_pede_a_checkout_session_e_grava_payment_pendente():
 
     # order_id passado ao gateway é o próprio Payment.id — é isso que o webhook usa depois para
     # encontrar este Payment via metadata.order_id (ver _get_payment_for_callback).
-    order_id, amount, success_url, cancel_url = gateway.calls[0]
+    order_id, amount, success_url, cancel_url, customer_email = gateway.calls[0]
     assert order_id == str(saved_payment.id)
     assert amount == Decimal("50.00")
     assert success_url == f"sentchu://enviando?id={saved_payment.id}&paymentMethod=mbway"
     assert cancel_url == success_url
+    # Email do cliente (vindo de build_remittance, que agora corre antes do processor.execute)
+    # passado à Checkout Session para pré-preencher o campo na página da Stripe.
+    assert customer_email == "cliente@example.com"
 
 
 def test_execute_payment_sem_dados_mbway_ainda_cria_a_sessao():

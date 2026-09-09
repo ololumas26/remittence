@@ -58,6 +58,7 @@ class StripeMbwayGateway:
         amount: Decimal,
         success_url: str,
         cancel_url: str,
+        customer_email: str | None = None,
     ) -> tuple[str, str]:
         """Cria uma Stripe Checkout Session para um pagamento MB WAY. Devolve
         (checkout_url, session_id): checkout_url é o URL da página hospedada da Stripe para onde
@@ -100,6 +101,9 @@ class StripeMbwayGateway:
                 success_url=success_url,
                 cancel_url=cancel_url,
                 payment_intent_data={"metadata": {"order_id": order_id}},
+                # Pré-preenche o email na página da Stripe com o do cliente autenticado — sem
+                # isto o campo fica sempre vazio (a Stripe nunca o adivinha sozinha).
+                **({"customer_email": customer_email} if customer_email else {}),
                 # Pedidos repetidos com o mesmo order_id (ex: retry de rede do lado do nosso
                 # backend) nunca criam uma segunda Session/PaymentIntent na Stripe.
                 idempotency_key=order_id,

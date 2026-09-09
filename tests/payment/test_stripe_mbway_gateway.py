@@ -30,6 +30,7 @@ def test_create_checkout_session_devolve_url_e_id_da_session(monkeypatch):
         amount=Decimal("50.00"),
         success_url="sentchu://enviando?id=order-1&paymentMethod=mbway",
         cancel_url="sentchu://enviando?id=order-1&paymentMethod=mbway",
+        customer_email="cliente@example.com",
     )
 
     assert checkout_url == "https://checkout.stripe.com/c/pay/cs_123"
@@ -40,7 +41,28 @@ def test_create_checkout_session_devolve_url_e_id_da_session(monkeypatch):
     assert captured["line_items"][0]["price_data"]["unit_amount"] == 5000
     assert captured["payment_intent_data"]["metadata"]["order_id"] == "order-1"
     assert captured["success_url"] == "sentchu://enviando?id=order-1&paymentMethod=mbway"
+    assert captured["customer_email"] == "cliente@example.com"
     assert captured["idempotency_key"] == "order-1"
+
+
+def test_create_checkout_session_sem_email_nao_manda_o_parametro(monkeypatch):
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(url="https://checkout.stripe.com/c/pay/cs_123", id="cs_123")
+
+    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(fake_create))
+    gateway = StripeMbwayGateway(api_key="sk_test_123")
+
+    gateway.create_checkout_session(
+        order_id="order-1",
+        amount=Decimal("50.00"),
+        success_url="sentchu://enviando",
+        cancel_url="sentchu://enviando",
+    )
+
+    assert "customer_email" not in captured
 
 
 def test_create_checkout_session_levanta_gateway_error_quando_stripe_recusa(monkeypatch):

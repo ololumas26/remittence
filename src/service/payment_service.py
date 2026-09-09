@@ -43,7 +43,9 @@ class PaymentExecutionResult:
 
 class ProcessarPagamento(ABC):
     @abstractmethod
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> PaymentExecutionResult:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         raise NotImplementedError
 
 
@@ -54,7 +56,9 @@ class Mbway(ProcessarPagamento):
     def __init__(self, gateway: StripeMbwayGateway | None = None):
         self.gateway = gateway or StripeMbwayGateway()
 
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> PaymentExecutionResult:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         # O número de telemóvel já não é usado aqui — passou a ser a própria página de Checkout
         # da Stripe a pedi-lo ao cliente (é aí, do lado do cliente, que a confirmação realmente
         # acontece e a notificação push é disparada; ver o comentário em StripeMbwayGateway).
@@ -64,6 +68,7 @@ class Mbway(ProcessarPagamento):
             amount=payment.amount,
             success_url=f"{MBWAY_CHECKOUT_RETURN_URL}?id={payment.id}&paymentMethod=mbway",
             cancel_url=f"{MBWAY_CHECKOUT_RETURN_URL}?id={payment.id}&paymentMethod=mbway",
+            customer_email=customer_email,
         )
         return PaymentExecutionResult(provider_reference=session_id, redirect_url=checkout_url)
 
@@ -72,14 +77,18 @@ class CreditDebitCard(ProcessarPagamento):
 
     method = 'credit_debit'
     
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> PaymentExecutionResult:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         """Chamar a stripe e processar o pagamwnto por cartão de crédito ou débito"""
         print("Executando pagamento por cartão")
         return PaymentExecutionResult(provider_reference="ID do pagamento")
 
 class MultibankReference(ProcessarPagamento):
     method = 'multibank'
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> PaymentExecutionResult:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         """Chamar a stripe e processar o pagamwnto por referência multibanco"""
         print("Executando pagamento por multibanco")
         return PaymentExecutionResult(provider_reference="ID do pagamento")
@@ -123,14 +132,19 @@ class PaymentService:
             amount=create_remittance.amount,
         )
 
-        # Tal como antes: build_remittance só valida e constrói em memória, nada é gravado até ao
+        # build_remittance só valida e constrói em memória, nada é gravado até ao
         # payment_transaction_repo.save() mais abaixo — uma remessa nunca fica gravada sem que o
         # pedido de pagamento correspondente tenha sido aceite primeiro (processor.execute()
-        # levanta PaymentGatewayError/InvalidPaymentDataError e interrompe tudo antes disso).
-        result = processor.execute(payment, create_payment)
+        # levanta PaymentGatewayError interrompe tudo antes disso). Corre antes do processor.
+        # execute() por duas razões: falha mais cedo (validações de destinatário/montante) sem
+        # sequer chegar a criar uma Checkout Session na Stripe por nada, e dá-nos o email do
+        # cliente a tempo de o passar para a Session (Stripe.checkout.Session.create(
+        # customer_email=...)) — sem isto o campo de email na página da Stripe fica sempre vazio.
+        remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address=ip_address)
+
+        result = processor.execute(payment, create_payment, customer_email=client.email)
         payment.provider_reference = result.provider_reference
 
-        remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address=ip_address)
         notification = NotificationService.for_remittance_created(remittance)
         saved_payment, saved_remittance = self.payment_transaction_repo.save(
             payment, remittance, notification
