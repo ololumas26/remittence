@@ -4,7 +4,7 @@ from src.model.payment import Payment
 from uuid import UUID
 
 
-class SqlPaymentRepository():
+class SqlPaymentRepository(PaymentRepository):
 
     def __init__(self, db : Session):
         self.db = db

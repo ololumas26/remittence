@@ -15,6 +15,16 @@ class RemittanceRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def transition_status(
+        self, remittance_id: UUID, new_status: RemittanceStatus
+    ) -> Remittance | None:
+        """Commit a terminal transition only if still in progress (and paid for SENT).
+
+        Return None when no row satisfies the conditions; never overwrite a winner.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def get_all(
         self, limit : int, offset : int, order_by : str, client_id : UUID | None = None,
         status : RemittanceStatus | None = None, created_from : date | None = None,
