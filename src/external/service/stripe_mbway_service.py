@@ -15,25 +15,33 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_MBWAY_WEBHOOK_SECRET = os.environ.get("STRIPE_MBWAY_WEBHOOK_SECRET")
 
 # Eventos de PaymentIntent que nos interessam — MB WAY é "customer-initiated" (confirmação via
-# notificação push no telemóvel, sem redirecionamento), por isso a Stripe notifica sempre o
-# resultado final por webhook, nunca por um return_url. Ver
-# PaymentService.handle_stripe_webhook.
+# notificação push no telemóvel, sem redirecionamento de volta à nossa API), por isso a Stripe
+# notifica sempre o resultado final por webhook. Continuam a ser eventos de PaymentIntent, não de
+# Checkout Session, mesmo depois da mudança para Checkout Sessions abaixo — a Session só existe
+# para gerar a página onde o cliente confirma; o PaymentIntent por trás dela dispara os mesmos
+# eventos de sempre. Ver PaymentService.handle_stripe_webhook.
 EVENT_PAYMENT_SUCCEEDED = "payment_intent.succeeded"
 EVENT_PAYMENT_FAILED = "payment_intent.payment_failed"
 
 
 class StripeMbwayGateway:
     """
-    Fina camada sobre a API da Stripe para iniciar (e depois confirmar, via webhook) pagamentos
-    MB WAY. Tal como o gateway anterior, uma falha aqui é propagada (PaymentGatewayError) — nunca
-    tratada como "melhor esforço": a remessa não avança sem um PaymentIntent aceite pela Stripe.
+    Fina camada sobre a API da Stripe para iniciar (via Checkout Session) e depois confirmar (via
+    webhook) pagamentos MB WAY. Uma falha aqui é sempre propagada (PaymentGatewayError) — nunca
+    tratada como "melhor esforço": a remessa não avança sem uma Checkout Session aceite pela
+    Stripe.
 
-    O formato exato dos pedidos (payment_method_types=['mb_way'], o telemóvel a viajar em
-    billing_details.phone e não num campo dedicado dentro de payment_method_data.mb_way) foi
-    confirmado a partir dos stubs de tipos oficiais do SDK Python da Stripe (pacote `stripe`,
-    stripe/params/_payment_intent_create_params.py) — a página de documentação específica para a
-    integração "Direct API" do MB WAY não ficou acessível durante o desenvolvimento. Vale a pena
-    confirmar o fluxo uma vez contra o sandbox real assim que houver credenciais.
+    Porquê Checkout Session e não PaymentIntent.create(confirm=True) diretamente (como esta
+    classe fazia antes): confirmámos, contra a documentação oficial do MB WAY e contra o
+    comportamento reportado pelo próprio utilizador (recebia a notificação push via Checkout mas
+    não via este gateway), que a notificação para o telemóvel do cliente só é disparada quando a
+    confirmação do PaymentIntent acontece do lado do cliente (stripe.confirmMbWayPayment, com a
+    chave pública) — nunca quando é o servidor a confirmar com a chave secreta, como fazíamos.
+    O SDK nativo da Stripe para React Native também não suporta MB WAY (só Multibanco), por isso
+    a única confirmação "do lado do cliente" viável aqui é a própria página hospedada da Stripe
+    (Checkout) — o frontend abre o URL devolvido por create_checkout_session num browser
+    embutido (expo-web-browser) e volta à app via o success_url/cancel_url (deep link
+    "sentchu://...").
     """
 
     def __init__(
@@ -44,11 +52,26 @@ class StripeMbwayGateway:
         self.api_key = api_key
         self.webhook_secret = webhook_secret
 
-    def request_payment(self, order_id: str, amount: Decimal, phone_number: str) -> str:
-        """Cria e confirma um PaymentIntent MB WAY. Devolve o id do PaymentIntent (ex:
-        "pi_..."), guardado como Payment.provider_reference — é ele que liga o webhook de
-        confirmação ao Payment certo. O PaymentIntent fica "processing" (ou equivalente) até o
-        cliente confirmar no telemóvel; ver handle_stripe_webhook para a confirmação em si."""
+    def create_checkout_session(
+        self,
+        order_id: str,
+        amount: Decimal,
+        success_url: str,
+        cancel_url: str,
+    ) -> tuple[str, str]:
+        """Cria uma Stripe Checkout Session para um pagamento MB WAY. Devolve
+        (checkout_url, session_id): checkout_url é o URL da página hospedada da Stripe para onde
+        o frontend deve navegar/abrir num browser embutido; session_id ("cs_...") é guardado
+        como Payment.provider_reference até o webhook confirmar/falhar o pagamento e o
+        substituir pelo id do PaymentIntent real (ver PaymentService._confirm_payment).
+
+        Ao contrário do antigo PaymentIntent.create(confirm=True), a Checkout Session NÃO cria o
+        PaymentIntent de forma síncrona — só quando o cliente avança na página — por isso não
+        temos aqui o id do PaymentIntent. Para o webhook conseguir encontrar este Payment mais
+        tarde sem esse id, order_id vai em payment_intent_data.metadata: assim que o
+        PaymentIntent é criado (do lado da Stripe), essa metadata viaja com ele para os eventos
+        payment_intent.succeeded/payment_intent.payment_failed — ver
+        PaymentService._get_payment_for_callback."""
 
         if not self.api_key:
             logger.error("STRIPE_SECRET_KEY não configurada — não é possível iniciar pagamentos MB WAY")
@@ -61,27 +84,32 @@ class StripeMbwayGateway:
         amount_in_cents = int((amount * 100).quantize(Decimal("1")))
 
         try:
-            payment_intent = stripe.PaymentIntent.create(
-                amount=amount_in_cents,
-                currency="eur",
+            session = stripe.checkout.Session.create(
+                mode="payment",
                 payment_method_types=["mb_way"],
-                payment_method_data={
-                    "type": "mb_way",
-                    "billing_details": {"phone": self._format_phone(phone_number)},
-                },
-                confirm=True,
-                description=f"Sentchu - remessa {order_id}",
-                metadata={"order_id": order_id},
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "eur",
+                            "unit_amount": amount_in_cents,
+                            "product_data": {"name": f"Remessa Sentchu {order_id}"},
+                        },
+                        "quantity": 1,
+                    }
+                ],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                payment_intent_data={"metadata": {"order_id": order_id}},
                 # Pedidos repetidos com o mesmo order_id (ex: retry de rede do lado do nosso
-                # backend) nunca criam um segundo PaymentIntent na Stripe.
+                # backend) nunca criam uma segunda Session/PaymentIntent na Stripe.
                 idempotency_key=order_id,
             )
         except stripe.StripeError as exc:
-            logger.exception("Falha ao pedir pagamento MB WAY via Stripe (order_id=%s)", order_id)
+            logger.exception("Falha ao criar Checkout Session MB WAY via Stripe (order_id=%s)", order_id)
             message = getattr(exc, "user_message", None) or str(exc) or "Pedido de pagamento MB WAY recusado."
             raise PaymentGatewayError(message)
 
-        return payment_intent.id
+        return session.url, session.id
 
     def verify_webhook(self, payload: bytes, signature: str | None) -> stripe.Event:
         """Verifica a assinatura de um webhook recebido (cabeçalho Stripe-Signature) e devolve o
@@ -97,20 +125,3 @@ class StripeMbwayGateway:
         except (stripe.SignatureVerificationError, ValueError):
             logger.warning("Callback da Stripe recusado: assinatura inválida ou payload malformado")
             raise InvalidPaymentCallbackError("Assinatura do callback inválida")
-
-    @staticmethod
-    def _format_phone(phone_number: str) -> str:
-        # billing_details.phone espera formato E.164 (ex: "+351912345678"). Aceita-se aqui tanto
-        # um número já nesse formato como só os dígitos nacionais — assume-se sempre Portugal
-        # (+351), único país onde o MB WAY está disponível.
-        cleaned = phone_number.strip()
-
-        if cleaned.startswith("+"):
-            return cleaned
-
-        digits = "".join(ch for ch in cleaned if ch.isdigit())
-
-        if digits.startswith("351") and len(digits) > 9:
-            return f"+{digits}"
-
-        return f"+351{digits}"

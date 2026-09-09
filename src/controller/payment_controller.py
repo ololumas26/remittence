@@ -26,9 +26,12 @@ def submit(
     # submeter remessas em seu próprio nome — ignora/sobrepõe qualquer client_id vindo do corpo
     # do pedido (agora aninhado em create_payment.remittance, não mais direto no corpo).
     create_payment.remittance.client_id = client.id
-    remittance, payment = payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
+    remittance, payment, redirect_url = payment_service.execute_payment(
+        create_payment, ip_address=get_client_ip(request)
+    )
     remittance_out = RemittanceOut.model_validate(remittance)
     remittance_out.payment_status = payment.status
+    remittance_out.payment_redirect_url = redirect_url
     return success_response(
         data=remittance_out,
         message="Pagamento iniciado",

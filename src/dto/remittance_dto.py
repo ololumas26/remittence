@@ -55,3 +55,8 @@ class RemittanceOut(BaseModel):
     # frontend faz polling (GET /remittance/{id}) para saber quando um pagamento assíncrono (ex:
     # MB WAY) passou de "Pending" a "Succeeded"/"Failed" — ver enviando.tsx no frontend.
     payment_status: PaymentStatus | None = None
+    # Só preenchido para pagamentos que precisam que o cliente confirme fora da app (hoje só MB
+    # WAY, via Checkout Session) — o URL da página hospedada da Stripe. Também montado à parte
+    # pelo controller, a partir do que PaymentService.execute_payment devolve; None nos outros
+    # métodos e para remessas já existentes lidas via GET /remittance/{id}.
+    payment_redirect_url: str | None = None
