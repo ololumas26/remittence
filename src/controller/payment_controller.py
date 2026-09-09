@@ -26,3 +26,19 @@ def submit(
     create_payment.remittance.client_id = client.id
     payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
     return "Rota de pagamento"
+
+
+@payment_route.get('/mbway/callback')
+@limiter.limit("30/minute")
+def mbway_callback(
+    request : Request,
+    apk : str = Query(..., description="Chave antiphishing definida na ativação do callback"),
+    tid : str = Query(..., description="RequestId devolvido pela ifthenpay no pedido de pagamento"),
+    val : str = Query(..., description="Valor pago, para validar contra o Payment"),
+    payment_service : PaymentService = Depends(get_payment_service)
+):
+    # Chamado pela própria ifthenpay (nunca pelo cliente da app) para confirmar de forma
+    # assíncrona que um pagamento MB WAY foi pago — ver PaymentService.confirm_mbway_payment e o
+    # comentário em Payment.status sobre a confirmação chegar sempre via webhook do processador.
+    payment_service.confirm_mbway_payment(antiphishing_key=apk, transaction_id=tid, amount=val)
+    return "OK"

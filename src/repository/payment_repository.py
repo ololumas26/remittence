@@ -19,3 +19,8 @@ class SqlPaymentRepository(PaymentRepository):
         self.db.refresh(payment)
 
         return payment
+
+    def get_by_provider_reference(self, provider_reference : str):
+        return self.db.exec(
+            select(Payment).where(Payment.provider_reference == provider_reference)
+        ).first()
