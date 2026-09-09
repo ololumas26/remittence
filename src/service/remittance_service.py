@@ -164,6 +164,7 @@ class RemittanceService:
             # mesmo que o Recipient seja depois editado ou apagado.
             recipient_name=recipient.full_name,
             recipient_account_iban=recipient.account_iban,
+            recipient_bank_code=recipient.bank_code,
             ip_address=ip_address or None,
         )
 

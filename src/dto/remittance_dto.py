@@ -44,6 +44,7 @@ class RemittanceOut(BaseModel):
     exchange_rate: Decimal
     recipient_name: str
     recipient_account_iban: str
+    recipient_bank_code: str | None
     status: RemittanceStatus
     created_at: datetime
     updated_at: datetime | None

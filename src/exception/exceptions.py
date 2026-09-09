@@ -22,6 +22,11 @@ class InvalidIdentifierError(AppException):
     code = "INVALID_IDENTIFIER"
 
 
+class InvalidRecipientBankError(AppException):
+    """O banco selecionado não coincide com o código bancário presente no IBAN."""
+    code = "INVALID_RECIPIENT_BANK"
+
+
 class ExpiredDocumentError(AppException):
     """Levantada quando um documento é submetido já com a data de expiração no passado."""
     code = "DOCUMENT_EXPIRED"

@@ -1,8 +1,9 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from datetime import datetime
 from uuid import UUID
 
-from src.validator.iban_validator import is_valid_iban
+from src.validator.iban_validator import clean_iban, get_bank_code, is_valid_iban
+from src.constant.angola_bank_codes import ANGOLA_BANK_CODES
 
 
 class CreateRecipient(BaseModel):
@@ -12,6 +13,7 @@ class CreateRecipient(BaseModel):
     client_id: UUID | None = None
     full_name: str
     account_iban: str
+    bank_code: str
     location: str | None = None
     relationship: str | None = None
 
@@ -32,10 +34,24 @@ class CreateRecipient(BaseModel):
 
         return iban
 
+    @field_validator('bank_code', mode='after')
+    @classmethod
+    def validate_bank_code(cls, bank_code: str):
+        if bank_code not in ANGOLA_BANK_CODES:
+            raise ValueError("Banco inválido")
+        return bank_code
+
+    @model_validator(mode='after')
+    def validate_bank_matches_iban(self):
+        if get_bank_code(clean_iban(self.account_iban)) != self.bank_code:
+            raise ValueError("O banco selecionado não corresponde ao IBAN")
+        return self
+
 
 class UpdateRecipient(BaseModel):
     full_name: str | None = None
     account_iban: str | None = None
+    bank_code: str | None = None
     location: str | None = None
     relationship: str | None = None
 
@@ -56,6 +72,20 @@ class UpdateRecipient(BaseModel):
 
         return iban
 
+    @field_validator('bank_code', mode='after')
+    @classmethod
+    def validate_bank_code(cls, bank_code: str | None):
+        if bank_code is not None and bank_code not in ANGOLA_BANK_CODES:
+            raise ValueError("Banco inválido")
+        return bank_code
+
+    @model_validator(mode='after')
+    def validate_bank_matches_iban(self):
+        if self.account_iban is not None and self.bank_code is not None:
+            if get_bank_code(clean_iban(self.account_iban)) != self.bank_code:
+                raise ValueError("O banco selecionado não corresponde ao IBAN")
+        return self
+
 
 class RecipientOut(BaseModel):
     """DTO de saída: o que a API expõe sobre um Recipient."""
@@ -66,6 +96,7 @@ class RecipientOut(BaseModel):
     client_id: UUID
     full_name: str
     account_iban: str
+    bank_code: str | None
     location: str | None
     relationship: str | None
     created_at: datetime
