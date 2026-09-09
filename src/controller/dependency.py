@@ -19,7 +19,7 @@ from src.model.client import Client
 from src.exception.exceptions import ResourceNotFoundError
 from src.security.dependencies import get_client_service, get_current_user
 from src.service.payment_service import PaymentService
-from src.external.service.ifthenpay_mbway_service import IfthenpayMbwayGateway
+from src.external.service.stripe_mbway_service import StripeMbwayGateway
 from src.service.notification_service import NotificationService
 from src.repository.notification_repository import SqlNotificationRepository
 from src.repository.payment_repository import SqlPaymentRepository
@@ -56,13 +56,13 @@ def get_email_service() -> EmailService:
     return _email_service
 
 
-# Mesma razão da instância partilhada acima: o gateway não guarda estado entre pedidos (a chave
-# da ifthenpay só é lida do ambiente uma vez, ver ifthenpay_mbway_service.py).
-_ifthenpay_mbway_gateway = IfthenpayMbwayGateway()
+# Mesma razão da instância partilhada acima: o gateway não guarda estado entre pedidos (as
+# chaves da Stripe só são lidas do ambiente uma vez, ver stripe_mbway_service.py).
+_stripe_mbway_gateway = StripeMbwayGateway()
 
 
-def get_ifthenpay_mbway_gateway() -> IfthenpayMbwayGateway:
-    return _ifthenpay_mbway_gateway
+def get_stripe_mbway_gateway() -> StripeMbwayGateway:
+    return _stripe_mbway_gateway
 
 
 def get_recipient_service(session : session_DP):
@@ -108,7 +108,7 @@ def get_current_client(
 def get_payment_service(
     session : session_DP,
     remittance_service : RemittanceService = Depends(get_remittance_service),
-    mbway_gateway : IfthenpayMbwayGateway = Depends(get_ifthenpay_mbway_gateway),
+    mbway_gateway : StripeMbwayGateway = Depends(get_stripe_mbway_gateway),
 ):
     payment_transaction_repository = SqlPaymentTransactionRepository(session)
     payment_repository = SqlPaymentRepository(session)

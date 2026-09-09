@@ -43,6 +43,7 @@ SQLAlchemy==2.0.52
 sqlmodel==0.0.39
 starlette==1.6.0
 storage3==2.31.0
+stripe==15.6.1
 StrEnum==0.4.15
 supabase-auth==2.31.0
 supabase-functions==2.31.0

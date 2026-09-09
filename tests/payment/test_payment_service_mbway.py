@@ -1,10 +1,10 @@
 """
-PaymentService com o pagamento MB WAY real: execute_payment (pedir o pagamento à ifthenpay antes
-de gravar Payment+Remittance) e confirm_mbway_payment (o callback assíncrono que confirma o
-pagamento e é o que desbloqueia RemittanceService.mark_as_sent, ver
+PaymentService com o pagamento MB WAY real (via Stripe): execute_payment (pedir o pagamento
+antes de gravar Payment+Remittance) e handle_stripe_webhook (o webhook assíncrono que confirma
+ou falha o pagamento e é o que desbloqueia RemittanceService.mark_as_sent, ver
 _transition_status/mark_as_sent em remittance_service.py). Tudo com fakes em memória — sem base
 de dados nem rede real (a chamada de rede em si já está coberta isoladamente em
-test_ifthenpay_mbway_gateway.py).
+test_stripe_mbway_gateway.py).
 """
 
 from decimal import Decimal
@@ -22,19 +22,25 @@ from src.service.payment_service import PaymentService
 
 
 class FakeGateway:
-    """Substitui IfthenpayMbwayGateway: não faz nenhuma chamada de rede, só devolve o que o
-    teste configurar (um RequestId de sucesso, ou levanta PaymentGatewayError)."""
+    """Substitui StripeMbwayGateway: nem request_payment nem verify_webhook fazem qualquer
+    chamada de rede — devolvem o que o teste configurar."""
 
-    def __init__(self, request_id="req-123", error=None):
+    def __init__(self, request_id="pi_123", error=None):
         self.request_id = request_id
         self.error = error
         self.calls = []
+        self.events = []
 
     def request_payment(self, order_id, amount, phone_number):
         self.calls.append((order_id, amount, phone_number))
         if self.error:
             raise self.error
         return self.request_id
+
+    def verify_webhook(self, payload, signature):
+        if signature == "assinatura-invalida":
+            raise InvalidPaymentCallbackError("Assinatura do callback inválida")
+        return self.events.pop(0)
 
 
 class FakePaymentRepo:
@@ -99,7 +105,6 @@ def make_service(gateway=None, payment_repo=None, transaction_repo=None):
         payment_transaction_repository=transaction_repo or FakePaymentTransactionRepo(),
         payment_repository=payment_repo or FakePaymentRepo(),
         mbway_gateway=gateway or FakeGateway(),
-        mbway_callback_key="segredo-teste",
     )
 
 
@@ -118,7 +123,7 @@ def make_create_payment(phone_number="912345678", amount=Decimal("50.00")):
 
 
 def test_execute_payment_pede_o_pagamento_e_grava_payment_pendente():
-    gateway = FakeGateway(request_id="req-999")
+    gateway = FakeGateway(request_id="pi_999")
     transaction_repo = FakePaymentTransactionRepo()
     service = make_service(gateway=gateway, transaction_repo=transaction_repo)
 
@@ -129,7 +134,7 @@ def test_execute_payment_pede_o_pagamento_e_grava_payment_pendente():
     assert len(transaction_repo.saved) == 1
     saved_payment, saved_rem, _ = transaction_repo.saved[0]
     assert saved_payment.status == PaymentStatus.PENDING
-    assert saved_payment.provider_reference == "req-999"
+    assert saved_payment.provider_reference == "pi_999"
     assert saved_rem is saved_remittance
 
 
@@ -156,7 +161,7 @@ def test_execute_payment_gateway_recusado_nao_grava_nada():
     assert transaction_repo.saved == []
 
 
-def _pending_payment(reference="req-999", amount=Decimal("50.00")):
+def _pending_payment(reference="pi_999", amount=Decimal("50.00")):
     return Payment(
         id=uuid4(),
         method=PaymentMethod.MBWAY,
@@ -166,59 +171,115 @@ def _pending_payment(reference="req-999", amount=Decimal("50.00")):
     )
 
 
-def test_confirm_mbway_payment_marca_como_succeeded():
+def _succeeded_event(reference="pi_999", amount_cents=5000):
+    return {
+        "type": "payment_intent.succeeded",
+        "data": {"object": {"id": reference, "amount": amount_cents, "amount_received": amount_cents}},
+    }
+
+
+def _failed_event(reference="pi_999", amount_cents=5000, message="Cancelado pelo cliente"):
+    return {
+        "type": "payment_intent.payment_failed",
+        "data": {"object": {"id": reference, "amount": amount_cents, "last_payment_error": {"message": message}}},
+    }
+
+
+def test_handle_stripe_webhook_confirma_pagamento_com_sucesso():
     payment_repo = FakePaymentRepo()
-    payment = _pending_payment()
-    payment_repo.save(payment)
-    service = make_service(payment_repo=payment_repo)
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append(_succeeded_event())
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
 
-    confirmed = service.confirm_mbway_payment(
-        antiphishing_key="segredo-teste", transaction_id="req-999", amount="50.00"
-    )
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
 
-    assert confirmed.status == PaymentStatus.SUCCEEDED
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.SUCCEEDED
 
 
-def test_confirm_mbway_payment_e_idempotente_para_callback_repetido():
+def test_handle_stripe_webhook_e_idempotente_para_evento_repetido():
     payment_repo = FakePaymentRepo()
-    payment = _pending_payment()
-    payment_repo.save(payment)
-    service = make_service(payment_repo=payment_repo)
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append(_succeeded_event())
+    gateway.events.append(_succeeded_event())
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
 
-    service.confirm_mbway_payment(antiphishing_key="segredo-teste", transaction_id="req-999", amount="50.00")
-    confirmed_again = service.confirm_mbway_payment(
-        antiphishing_key="segredo-teste", transaction_id="req-999", amount="50.00"
-    )
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
 
-    assert confirmed_again.status == PaymentStatus.SUCCEEDED
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.SUCCEEDED
 
 
-def test_confirm_mbway_payment_chave_errada_nao_altera_estado():
+def test_handle_stripe_webhook_marca_como_failed():
     payment_repo = FakePaymentRepo()
-    payment = _pending_payment()
-    payment_repo.save(payment)
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append(_failed_event(message="Pedido expirou"))
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
+
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+
+    payment = payment_repo.get_by_provider_reference("pi_999")
+    assert payment.status == PaymentStatus.FAILED
+    assert payment.failure_reason == "Pedido expirou"
+
+
+def test_handle_stripe_webhook_sucesso_depois_de_falha_nao_reverte():
+    payment_repo = FakePaymentRepo()
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append(_failed_event())
+    gateway.events.append(_succeeded_event())
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
+
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+    with pytest.raises(InvalidPaymentCallbackError):
+        service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.FAILED
+
+
+def test_handle_stripe_webhook_assinatura_invalida_nao_altera_estado():
+    payment_repo = FakePaymentRepo()
+    payment_repo.save(_pending_payment())
     service = make_service(payment_repo=payment_repo)
 
     with pytest.raises(InvalidPaymentCallbackError):
-        service.confirm_mbway_payment(antiphishing_key="chave-errada", transaction_id="req-999", amount="50.00")
+        service.handle_stripe_webhook(payload=b"{}", signature="assinatura-invalida")
 
-    assert payment_repo.get_by_provider_reference("req-999").status == PaymentStatus.PENDING
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.PENDING
 
 
-def test_confirm_mbway_payment_valor_errado_nao_altera_estado():
+def test_handle_stripe_webhook_valor_errado_nao_altera_estado():
     payment_repo = FakePaymentRepo()
-    payment = _pending_payment()
-    payment_repo.save(payment)
-    service = make_service(payment_repo=payment_repo)
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append(_succeeded_event(amount_cents=999900))
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
 
     with pytest.raises(InvalidPaymentCallbackError):
-        service.confirm_mbway_payment(antiphishing_key="segredo-teste", transaction_id="req-999", amount="999.00")
+        service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
 
-    assert payment_repo.get_by_provider_reference("req-999").status == PaymentStatus.PENDING
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.PENDING
 
 
-def test_confirm_mbway_payment_referencia_desconhecida():
-    service = make_service()
+def test_handle_stripe_webhook_referencia_desconhecida():
+    gateway = FakeGateway()
+    gateway.events.append(_succeeded_event(reference="pi_desconhecido"))
+    service = make_service(gateway=gateway)
 
     with pytest.raises(InvalidPaymentCallbackError):
-        service.confirm_mbway_payment(antiphishing_key="segredo-teste", transaction_id="inexistente", amount="50.00")
+        service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+
+
+def test_handle_stripe_webhook_ignora_evento_irrelevante():
+    payment_repo = FakePaymentRepo()
+    payment_repo.save(_pending_payment())
+    gateway = FakeGateway()
+    gateway.events.append({"type": "payment_intent.created", "data": {"object": {"id": "pi_999"}}})
+    service = make_service(gateway=gateway, payment_repo=payment_repo)
+
+    service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
+
+    assert payment_repo.get_by_provider_reference("pi_999").status == PaymentStatus.PENDING
