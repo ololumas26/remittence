@@ -21,6 +21,16 @@ from src.model.remittance import AllowedCoins, Remittance
 from src.service.payment_service import PaymentService
 
 
+class FakeStripeObject(dict):
+    """Imita o essencial de um stripe.PaymentIntent real: um objecto com .to_dict() (usado em
+    PaymentService.handle_stripe_webhook), sem ser literalmente um dict — para apanhar exactamente
+    o bug que apareceu em produção (StripeObject deixou de suportar .get()/[] como um dict a
+    partir do stripe-python v15; só .to_dict() funciona)."""
+
+    def to_dict(self):
+        return dict(self)
+
+
 class FakeGateway:
     """Substitui StripeMbwayGateway: nem request_payment nem verify_webhook fazem qualquer
     chamada de rede — devolvem o que o teste configurar."""
@@ -174,14 +184,18 @@ def _pending_payment(reference="pi_999", amount=Decimal("50.00")):
 def _succeeded_event(reference="pi_999", amount_cents=5000):
     return {
         "type": "payment_intent.succeeded",
-        "data": {"object": {"id": reference, "amount": amount_cents, "amount_received": amount_cents}},
+        "data": {"object": FakeStripeObject(id=reference, amount=amount_cents, amount_received=amount_cents)},
     }
 
 
 def _failed_event(reference="pi_999", amount_cents=5000, message="Cancelado pelo cliente"):
     return {
         "type": "payment_intent.payment_failed",
-        "data": {"object": {"id": reference, "amount": amount_cents, "last_payment_error": {"message": message}}},
+        "data": {
+            "object": FakeStripeObject(
+                id=reference, amount=amount_cents, last_payment_error={"message": message}
+            )
+        },
     }
 
 
@@ -277,7 +291,7 @@ def test_handle_stripe_webhook_ignora_evento_irrelevante():
     payment_repo = FakePaymentRepo()
     payment_repo.save(_pending_payment())
     gateway = FakeGateway()
-    gateway.events.append({"type": "payment_intent.created", "data": {"object": {"id": "pi_999"}}})
+    gateway.events.append({"type": "payment_intent.created", "data": {"object": FakeStripeObject(id="pi_999")}})
     service = make_service(gateway=gateway, payment_repo=payment_repo)
 
     service.handle_stripe_webhook(payload=b"{}", signature="assinatura-valida")
