@@ -108,3 +108,22 @@ class AuthorizationError(AppException):
     para a operação (ex: rota exclusiva de staff acedida por uma conta sem esse papel).
     Distinta de AuthenticationError, que é para quando nem sequer há um utilizador válido."""
     code = "AUTHORIZATION_FAILED"
+
+
+class PaymentGatewayError(AppException):
+    """Levantada quando a comunicação com um processador de pagamento externo (ex: ifthenpay)
+    falha, não responde, ou recusa explicitamente o pedido."""
+    code = "PAYMENT_GATEWAY_ERROR"
+
+
+class InvalidPaymentDataError(AppException):
+    """Levantada quando faltam dados obrigatórios para o método de pagamento escolhido (ex:
+    número de telemóvel em falta para um pagamento MB WAY)."""
+    code = "INVALID_PAYMENT_DATA"
+
+
+class InvalidPaymentCallbackError(AppException):
+    """Levantada quando um callback de confirmação de pagamento (ex: webhook da ifthenpay) chega
+    com a chave antiphishing errada, um valor que não corresponde ao pagamento, ou referente a um
+    pagamento que não existe — nunca deve resultar em alterar o estado de um Payment."""
+    code = "INVALID_PAYMENT_CALLBACK"

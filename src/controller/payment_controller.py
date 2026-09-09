@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from src.constant.app_constant import APP_PREFIX
 from src.controller.dependency import get_payment_service, get_current_client
 from src.security.rate_limit import limiter
@@ -26,3 +26,20 @@ def submit(
     create_payment.remittance.client_id = client.id
     payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
     return "Rota de pagamento"
+
+
+@payment_route.post('/stripe/webhook')
+@limiter.limit("60/minute")
+async def stripe_webhook(
+    request : Request,
+    payment_service : PaymentService = Depends(get_payment_service)
+):
+    # Chamado pela própria Stripe (nunca pelo cliente da app) para confirmar de forma assíncrona
+    # o resultado de um pagamento MB WAY — ver PaymentService.handle_stripe_webhook e o
+    # comentário em Payment.status sobre a confirmação chegar sempre via webhook do processador.
+    # O corpo tem de ser lido em bruto (não como JSON já interpretado) porque a verificação da
+    # assinatura da Stripe é feita sobre os bytes exatos recebidos.
+    payload = await request.body()
+    signature = request.headers.get('stripe-signature')
+    payment_service.handle_stripe_webhook(payload, signature)
+    return "OK"

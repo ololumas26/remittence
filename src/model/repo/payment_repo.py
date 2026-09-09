@@ -12,3 +12,7 @@ class PaymentRepository(ABC):
     @abstractmethod
     def save(self, payment : Payment) -> Payment:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_by_provider_reference(self, provider_reference : str) -> Payment | None:
+        raise NotImplementedError

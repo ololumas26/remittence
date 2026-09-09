@@ -26,6 +26,9 @@ from src.exception.exceptions import (
     AuthenticationError,
     RestrictedRegionError,
     AuthorizationError,
+    PaymentGatewayError,
+    InvalidPaymentDataError,
+    InvalidPaymentCallbackError,
 )
 
 
@@ -48,10 +51,15 @@ STATUS_BY_EXCEPTION = {
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     RestrictedRegionError: status.HTTP_403_FORBIDDEN,
     AuthorizationError: status.HTTP_403_FORBIDDEN,
+    InvalidPaymentDataError: status.HTTP_400_BAD_REQUEST,
+    InvalidPaymentCallbackError: status.HTTP_400_BAD_REQUEST,
     # 502: a falha é do storage externo (Supabase), não de algo que o cliente enviou errado.
     FileUploadError: status.HTTP_502_BAD_GATEWAY,
     # 502: a falha é do Auth externo (Supabase), não de algo que o cliente enviou errado.
     AccountDeletionError: status.HTTP_502_BAD_GATEWAY,
+    # 502: a falha é do processador de pagamento externo (ifthenpay), não de algo que o
+    # cliente enviou errado.
+    PaymentGatewayError: status.HTTP_502_BAD_GATEWAY,
 }
 
 DEFAULT_APP_EXCEPTION_STATUS = status.HTTP_400_BAD_REQUEST
