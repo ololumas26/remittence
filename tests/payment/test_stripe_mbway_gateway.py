@@ -42,6 +42,7 @@ def test_create_checkout_session_devolve_url_e_id_da_session(monkeypatch):
     assert captured["payment_intent_data"]["metadata"]["order_id"] == "order-1"
     assert captured["success_url"] == "sentchu://enviando?id=order-1&paymentMethod=mbway"
     assert captured["customer_email"] == "cliente@example.com"
+    assert captured["origin_context"] == "mobile_app"
     assert captured["idempotency_key"] == "order-1"
 
 

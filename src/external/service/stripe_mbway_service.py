@@ -104,6 +104,16 @@ class StripeMbwayGateway:
                 # Pré-preenche o email na página da Stripe com o do cliente autenticado — sem
                 # isto o campo fica sempre vazio (a Stripe nunca o adivinha sozinha).
                 **({"customer_email": customer_email} if customer_email else {}),
+                # A Sentchu só abre esta Session a partir da app (nunca de um browser normal) —
+                # dizer isto à Stripe ("this Checkout Session originates from a mobile app that
+                # redirects customers to a Stripe-hosted payment page") aplica otimizações
+                # próprias para esse contexto. Suspeita levantada pelo próprio utilizador: sem
+                # isto, a Session ficava indistinguível de uma aberta num browser normal — e é
+                # exatamente o cenário em que o pagamento MB WAY resolvia (webhook limpo, sem
+                # erros) mas nunca chegava a disparar a notificação push real para o telemóvel,
+                # ao contrário de quando testado fora da app. Vale a pena confirmar com um teste
+                # real se isto resolve; se não resolver, o parâmetro é inofensivo de manter.
+                origin_context="mobile_app",
                 # Pedidos repetidos com o mesmo order_id (ex: retry de rede do lado do nosso
                 # backend) nunca criam uma segunda Session/PaymentIntent na Stripe.
                 idempotency_key=order_id,
