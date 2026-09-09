@@ -54,7 +54,7 @@ class PaymentService:
     # PaymentTransactionRepository, que os grava numa única transação atómica: ou os dois
     # persistem, ou nenhum persiste (nunca mais um Payment "Succeeded" órfão sem remessa). Só
     # depois desse commit é que o email de remessa criada é enviado.
-    def execute_payment(self, create_payment : CreatePayment) -> Remittance:
+    def execute_payment(self, create_payment : CreatePayment, ip_address: str = "") -> Remittance:
 
         create_remittance = create_payment.remittance
         payment_method = create_remittance.payment_method
@@ -76,7 +76,7 @@ class PaymentService:
             provider_reference=provider_reference,
         )
 
-        remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address="176.79.176.1")
+        remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address=ip_address)
 
         notification = NotificationService.for_remittance_created(remittance)
         saved_payment, saved_remittance = self.payment_transaction_repo.save(
