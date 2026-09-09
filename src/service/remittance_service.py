@@ -4,6 +4,8 @@ from src.model.repo.remittance_repo import RemittanceRepository
 from src.model.repo.client_repo import ClientRepository
 from src.model.repo.document_repo import DocumentRepository
 from src.model.repo.recipient_repo import RecipientRepository
+from src.model.repo.payment_repo import PaymentRepository
+from src.model.payment import PaymentStatus
 from src.dto.remittance_dto import CreateRemittance
 from src.dto.filter import RemittanceFilterParams
 from src.model.client import Client
@@ -33,7 +35,6 @@ from src.exception.exceptions import (
     UnderageClientError,
 )
 from uuid import UUID
-from datetime import datetime, timezone
 
 logger = logging.getLogger("remittance")
 
@@ -47,13 +48,15 @@ class RemittanceService:
 
     def __init__(self, remittance_repository : RemittanceRepository, client_repository : ClientRepository,
                  document_repository : DocumentRepository, recipient_repository : RecipientRepository,
-                 geolocation_service : GeolocationService, email_service : EmailService):
+                 geolocation_service : GeolocationService, email_service : EmailService,
+                payment_repository : PaymentRepository):
         self.remittance_repo = remittance_repository
         self.client_repo = client_repository
         self.document_repo = document_repository
         self.recipient_repo = recipient_repository
         self.geolocation_service = geolocation_service
         self.email_service = email_service
+        self.payment_repo = payment_repository
 
     def _ensure_client_is_adult(self, client) -> None:
         # ClientService.create/update já bloqueiam data de nascimento <18 anos ao gravar — mas
@@ -208,9 +211,24 @@ class RemittanceService:
             logger.exception("Falha ao preparar o email de remessa enviada para a remessa %s", remittance.id)
 
 
-    def _transition_status(self, remittance_id : str, new_status : RemittanceStatus):
+    def _transition_status(self, remittance_id : str, new_status : RemittanceStatus) -> tuple[Remittance, bool]:
+        """Devolve (remessa, transicionou_agora). `transicionou_agora` é False quando a remessa já
+        estava no estado pretendido — dois membros do staff a marcar a mesma remessa como enviada
+        (em simultâneo, ou um a repetir um pedido que já tinha sido aceite) não deve dar erro ao
+        segundo: é a mesma transição, só que já feita. `mark_as_sent` usa o booleano para não
+        reenviar o email de confirmação nesse caso."""
 
         remittance = self._get_or_raise(remittance_id)
+
+        # Já está no estado pretendido — sucesso idempotente, sem repetir efeitos secundários.
+        if remittance.status == new_status:
+            return remittance, False
+
+        payment = self.payment_repo.get_by_id(remittance.payment_id)
+
+        if new_status == RemittanceStatus.SENT:
+            if not payment or payment.status != PaymentStatus.SUCCEEDED:
+                raise ResourceNotFoundError("Essa remessa ainda não foi paga, pelo que não pode ser marcada como enviada")
 
         message = {
             RemittanceStatus.SENT : 'enviada',
@@ -218,19 +236,33 @@ class RemittanceService:
         }
 
         if remittance.status != RemittanceStatus.IN_PROGRESS:
+            # Estado terminal diferente do pretendido (ex: já rejeitada e agora tentam marcar como
+            # enviada) — conflito real, não uma repetição inofensiva do mesmo pedido.
             raise InvalidRemittanceStatusError(
                 f"Só é possível marcar como {message[new_status]} uma remessa em progresso "
                 f"(estado atual: {remittance.status.value})"
             )
-        remittance.status = new_status
-        remittance.updated_at = datetime.now(timezone.utc)
-        return remittance
+        # The reads above provide helpful errors; only the conditional UPDATE decides
+        # whether this request wins. Do not mutate/save the earlier ORM snapshot.
+        updated = self.remittance_repo.transition_status(remittance.id, new_status)
+        if updated is None:
+            # Perdemos a corrida: outro pedido já tratou disto entretanto. Vê o que aconteceu antes
+            # de decidir se é o mesmo pedido a repetir-se (idempotente) ou um conflito real.
+            current = self._get_or_raise(remittance_id)
+            if current.status == new_status:
+                return current, False
+            raise InvalidRemittanceStatusError(
+                "A remessa ou o pagamento foi alterado por outro pedido. Atualiza e tenta novamente."
+            )
+        return updated, True
 
 
     def mark_as_sent(self, remittance_id : str) -> Remittance:
 
-        remittance = self._transition_status(remittance_id, RemittanceStatus.SENT)
-        saved_remittance = self.remittance_repo.save(remittance)
+        saved_remittance, did_transition = self._transition_status(remittance_id, RemittanceStatus.SENT)
+
+        if not did_transition:
+            return saved_remittance
 
         # _transition_status já confirmou que a remessa existe, mas não devolve o cliente — vamos
         # buscá-lo só agora, e só para o email (get_by_id devolve None em vez de levantar, mas
@@ -249,8 +281,8 @@ class RemittanceService:
 
     def mark_as_rejected(self, remittance_id : str):
 
-        remittance = self._transition_status(remittance_id, RemittanceStatus.REJECTED)
-        return self.remittance_repo.save(remittance)
+        saved_remittance, _ = self._transition_status(remittance_id, RemittanceStatus.REJECTED)
+        return saved_remittance
 
 
     def get_remittance_by_id(self, remittance_id : str):

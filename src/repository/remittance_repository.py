@@ -1,6 +1,8 @@
 from src.model.repo.remittance_repo import RemittanceRepository
 from sqlmodel import Session, select, func
 from src.model.remittance import Remittance, RemittanceStatus
+from sqlalchemy import update
+from src.model.payment import Payment, PaymentStatus
 from src.model.notification import Notification
 from uuid import UUID
 from datetime import date, datetime, time, timezone, timedelta
@@ -20,6 +22,42 @@ class SqlRemittanceRepository():
         self.db.commit()
         self.db.refresh(remittance)
 
+        return remittance
+
+    def transition_status(
+        self, remittance_id: UUID, new_status: RemittanceStatus
+    ) -> Remittance | None:
+        if new_status not in (RemittanceStatus.SENT, RemittanceStatus.REJECTED):
+            raise ValueError("A transição tem de ser para Sent ou Rejected")
+
+        statement = (
+            update(Remittance)
+            .where(Remittance.id == remittance_id,
+                   Remittance.status == RemittanceStatus.IN_PROGRESS)
+            .values(status=new_status, updated_at=datetime.now(timezone.utc))
+        )
+        if new_status == RemittanceStatus.SENT:
+            # Recheck payment in SQL too: a previously loaded ORM object can be stale.
+            paid = select(Payment.id).where(
+                Payment.id == Remittance.payment_id,
+                Payment.status == PaymentStatus.SUCCEEDED,
+            ).exists()
+            statement = statement.where(paid)
+
+        statement = statement.returning(Remittance.id).execution_options(synchronize_session=False)
+        try:
+            updated_id = self.db.execute(statement).scalar_one_or_none()
+            if updated_id is None:
+                self.db.rollback()
+                return None
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        # Reload even with expire_on_commit=False: the identity map may hold the old state.
+        remittance = self.db.get(Remittance, updated_id)
+        self.db.refresh(remittance)
         return remittance
 
     def save_with_notification(

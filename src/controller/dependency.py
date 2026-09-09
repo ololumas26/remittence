@@ -21,6 +21,7 @@ from src.security.dependencies import get_client_service, get_current_user
 from src.service.payment_service import PaymentService
 from src.service.notification_service import NotificationService
 from src.repository.notification_repository import SqlNotificationRepository
+from src.repository.payment_repository import SqlPaymentRepository
 
 
 
@@ -70,6 +71,7 @@ def get_remittance_service(
         SqlRecipientRepository(session),
         geolocation_service,
         email_service,
+        SqlPaymentRepository(session)
     )
 
 
