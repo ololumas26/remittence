@@ -12,6 +12,7 @@ from src.controller.document_controller import document_route
 from src.controller.recipient_controller import recipient_route
 from src.controller.remittance_controller import remittance_route
 from src.controller.payment_controller import payment_route
+from src.controller.notification_controller import notification_route
 from src.exception.handlers import register_exception_handlers
 
 
@@ -50,7 +51,8 @@ routes = [
     document_route,
     recipient_route,
     remittance_route,
-    payment_route
+    payment_route,
+    notification_route,
 ]
 
 for route in routes:

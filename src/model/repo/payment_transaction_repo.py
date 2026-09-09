@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from src.model.payment import Payment
 from src.model.remittance import Remittance
+from src.model.notification import Notification
 
 
 class PaymentTransactionRepository(ABC):
@@ -15,5 +16,7 @@ class PaymentTransactionRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, payment : Payment, remittance : Remittance) -> tuple[Payment, Remittance]:
+    def save(
+        self, payment: Payment, remittance: Remittance, notification: Notification
+    ) -> tuple[Payment, Remittance]:
         raise NotImplementedError

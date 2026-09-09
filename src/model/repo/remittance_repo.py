@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from src.model.remittance import Remittance, RemittanceStatus
+from src.model.notification import Notification
 from uuid import UUID
 from datetime import date
 
@@ -12,6 +13,12 @@ class RemittanceRepository(ABC):
 
     @abstractmethod
     def save(self, remittance : Remittance) -> Remittance:
+        raise NotImplementedError
+
+    @abstractmethod
+    def save_with_notification(
+        self, remittance: Remittance, notification: Notification
+    ) -> Remittance:
         raise NotImplementedError
 
     @abstractmethod

@@ -19,6 +19,8 @@ from src.model.client import Client
 from src.exception.exceptions import ResourceNotFoundError
 from src.security.dependencies import get_client_service, get_current_user
 from src.service.payment_service import PaymentService
+from src.service.notification_service import NotificationService
+from src.repository.notification_repository import SqlNotificationRepository
 
 
 
@@ -97,3 +99,7 @@ def get_payment_service(
 ):
     payment_transaction_repository = SqlPaymentTransactionRepository(session)
     return PaymentService(remittance_service, payment_transaction_repository)
+
+
+def get_notification_service(session: session_DP):
+    return NotificationService(SqlNotificationRepository(session))

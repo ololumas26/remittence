@@ -11,6 +11,7 @@ from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
 from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date, get_18_year_date
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
+from src.service.notification_service import NotificationService
 from src.service.remittance_email_template import (
     remittance_created_subject,
     render_remittance_created_email,
@@ -173,7 +174,8 @@ class RemittanceService:
 
         remittance, client = self.build_remittance(create_remittance, ip_address)
 
-        saved_remittance = self.remittance_repo.save(remittance)
+        notification = NotificationService.for_remittance_created(remittance)
+        saved_remittance = self.remittance_repo.save_with_notification(remittance, notification)
 
         self.send_created_email(client, saved_remittance)
 
