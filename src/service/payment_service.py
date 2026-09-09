@@ -5,6 +5,7 @@ from src.model.payment_method import PaymentMethod
 from src.model.payment import Payment, PaymentStatus
 from src.model.remittance import Remittance
 from src.model.repo.payment_transaction_repo import PaymentTransactionRepository
+from src.service.notification_service import NotificationService
 
 
 class ProcessarPagamento(ABC):
@@ -77,7 +78,10 @@ class PaymentService:
 
         remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address="176.79.176.1")
 
-        saved_payment, saved_remittance = self.payment_transaction_repo.save(payment, remittance)
+        notification = NotificationService.for_remittance_created(remittance)
+        saved_payment, saved_remittance = self.payment_transaction_repo.save(
+            payment, remittance, notification
+        )
 
         self.remittance_service.send_created_email(client, saved_remittance)
 
