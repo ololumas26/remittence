@@ -68,8 +68,10 @@ def get_remittance(
 ):
     remittance = remittance_service.get_remittance_by_id(id)
     _ensure_owner(remittance, client)
+    remittance_out = RemittanceOut.model_validate(remittance)
+    remittance_out.payment_status = remittance_service.get_payment_status(remittance)
     return success_response(
-        data=RemittanceOut.model_validate(remittance)
+        data=remittance_out
     )
 
 

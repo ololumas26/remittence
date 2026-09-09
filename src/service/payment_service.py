@@ -85,7 +85,7 @@ class PaymentService:
             PaymentMethod.CARD: CreditDebitCard(),
             PaymentMethod.MULTIBANK: MultibankReference()}
 
-    def execute_payment(self, create_payment : CreatePayment, ip_address: str = "") -> Remittance:
+    def execute_payment(self, create_payment : CreatePayment, ip_address: str = "") -> tuple[Remittance, Payment]:
         create_remittance = create_payment.remittance
         payment_method = create_remittance.payment_method
         processor : ProcessarPagamento = self.payment_methods[payment_method]
@@ -115,7 +115,10 @@ class PaymentService:
             payment, remittance, notification
         )
         self.remittance_service.send_created_email(client, saved_remittance)
-        return saved_remittance
+        # (remittance, payment): o controller precisa dos dois para devolver payment_status ao
+        # frontend — é isso que ele faz polling logo a seguir a submeter (ver enviando.tsx),
+        # para saber quando um pagamento assíncrono como o MB WAY deixa de estar "Pending".
+        return saved_remittance, saved_payment
 
     def handle_stripe_webhook(self, payload: bytes, signature: str | None) -> None:
         """Trata um webhook da Stripe (ver payment_controller.stripe_webhook). Nunca chamado pelo

@@ -4,6 +4,8 @@ from src.controller.dependency import get_payment_service, get_current_client
 from src.security.rate_limit import limiter
 from src.service.payment_service import PaymentService
 from src.dto.payment_dto import CreatePayment
+from src.dto.remittance_dto import RemittanceOut
+from src.dto.response import success_response
 from src.model.client import Client
 
 from src.database.db import session_DP
@@ -24,8 +26,13 @@ def submit(
     # submeter remessas em seu próprio nome — ignora/sobrepõe qualquer client_id vindo do corpo
     # do pedido (agora aninhado em create_payment.remittance, não mais direto no corpo).
     create_payment.remittance.client_id = client.id
-    payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
-    return "Rota de pagamento"
+    remittance, payment = payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
+    remittance_out = RemittanceOut.model_validate(remittance)
+    remittance_out.payment_status = payment.status
+    return success_response(
+        data=remittance_out,
+        message="Pagamento iniciado",
+    )
 
 
 @payment_route.post('/stripe/webhook')

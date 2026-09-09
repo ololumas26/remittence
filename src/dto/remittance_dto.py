@@ -5,6 +5,7 @@ from uuid import UUID
 
 from src.model.remittance import RemittanceStatus, AllowedCoins
 from src.model.payment_method import PaymentMethod
+from src.model.payment import PaymentStatus
 
 
 class CreateRemittance(BaseModel):
@@ -48,3 +49,9 @@ class RemittanceOut(BaseModel):
     status: RemittanceStatus
     created_at: datetime
     updated_at: datetime | None
+    # Não vem direto do ORM (from_attributes não o preenche sozinho — Remittance não tem este
+    # atributo, só payment_id) — é montado à parte pelo controller, com
+    # RemittanceService.get_payment_status(), sempre que há um pagamento associado. É o que o
+    # frontend faz polling (GET /remittance/{id}) para saber quando um pagamento assíncrono (ex:
+    # MB WAY) passou de "Pending" a "Succeeded"/"Failed" — ver enviando.tsx no frontend.
+    payment_status: PaymentStatus | None = None

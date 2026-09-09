@@ -289,6 +289,16 @@ class RemittanceService:
     def get_remittance_by_id(self, remittance_id : str):
         return self._get_or_raise(remittance_id)
 
+
+    def get_payment_status(self, remittance : Remittance) -> PaymentStatus | None:
+        """None quando a remessa não tem pagamento associado (só acontece em remessas antigas,
+        de antes da rota de pagamento existir — ver o comentário em payment_id no model)."""
+        if not remittance.payment_id:
+            return None
+
+        payment = self.payment_repo.get_by_id(remittance.payment_id)
+        return payment.status if payment else None
+
     def get_all(self, filter : RemittanceFilterParams):
         remittances = self.remittance_repo.get_all(
             limit=filter.limit,

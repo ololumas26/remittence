@@ -138,14 +138,15 @@ def test_execute_payment_pede_o_pagamento_e_grava_payment_pendente():
     service = make_service(gateway=gateway, transaction_repo=transaction_repo)
 
     create_payment = make_create_payment()
-    saved_remittance = service.execute_payment(create_payment)
+    returned_remittance, returned_payment = service.execute_payment(create_payment)
 
     assert len(gateway.calls) == 1
     assert len(transaction_repo.saved) == 1
     saved_payment, saved_rem, _ = transaction_repo.saved[0]
     assert saved_payment.status == PaymentStatus.PENDING
     assert saved_payment.provider_reference == "pi_999"
-    assert saved_rem is saved_remittance
+    assert saved_rem is returned_remittance
+    assert saved_payment is returned_payment
 
 
 def test_execute_payment_sem_numero_de_telemovel_levanta_erro_sem_gravar():

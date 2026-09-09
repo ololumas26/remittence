@@ -149,3 +149,25 @@ class TestTransitionIdempotency:
 
         with pytest.raises(ResourceNotFoundError):
             service.mark_as_sent(str(remittance.id))
+
+
+class TestGetPaymentStatus:
+    """RemittanceService.get_payment_status — usado pelo GET /remittance/{id} para o frontend
+    fazer polling (ver enviando.tsx) enquanto um pagamento assíncrono (MB WAY) ainda está
+    'Pending'."""
+
+    def test_devolve_o_estado_do_pagamento_associado(self):
+        payment = Payment(id=uuid4(), status=PaymentStatus.PENDING)
+        remittance = make_remittance(payment_id=payment.id)
+        service = make_service(FakeRemittanceRepo(remittance), payment=payment)
+
+        assert service.get_payment_status(remittance) == PaymentStatus.PENDING
+
+    def test_devolve_none_quando_a_remessa_nao_tem_pagamento_associado(self):
+        # make_remittance() sempre atribui um payment_id (payment_id or uuid4()) — aqui é
+        # importante mesmo não ter nenhum, por isso constrói-se a remessa à parte.
+        remittance = make_remittance()
+        remittance.payment_id = None
+        service = make_service(FakeRemittanceRepo(remittance), payment=None)
+
+        assert service.get_payment_status(remittance) is None
