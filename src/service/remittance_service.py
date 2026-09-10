@@ -212,7 +212,9 @@ class RemittanceService:
             logger.exception("Falha ao preparar o email de remessa enviada para a remessa %s", remittance.id)
 
 
-    def _transition_status(self, remittance_id : str, new_status : RemittanceStatus) -> tuple[Remittance, bool]:
+    def _transition_status(
+        self, remittance_id : str, new_status : RemittanceStatus, note : str | None = None
+    ) -> tuple[Remittance, bool]:
         """Devolve (remessa, transicionou_agora). `transicionou_agora` é False quando a remessa já
         estava no estado pretendido — dois membros do staff a marcar a mesma remessa como enviada
         (em simultâneo, ou um a repetir um pedido que já tinha sido aceite) não deve dar erro ao
@@ -245,7 +247,7 @@ class RemittanceService:
             )
         # The reads above provide helpful errors; only the conditional UPDATE decides
         # whether this request wins. Do not mutate/save the earlier ORM snapshot.
-        updated = self.remittance_repo.transition_status(remittance.id, new_status)
+        updated = self.remittance_repo.transition_status(remittance.id, new_status, note=note)
         if updated is None:
             # Perdemos a corrida: outro pedido já tratou disto entretanto. Vê o que aconteceu antes
             # de decidir se é o mesmo pedido a repetir-se (idempotente) ou um conflito real.
@@ -280,9 +282,9 @@ class RemittanceService:
         return saved_remittance
 
 
-    def mark_as_rejected(self, remittance_id : str):
+    def mark_as_rejected(self, remittance_id : str, note : str):
 
-        saved_remittance, _ = self._transition_status(remittance_id, RemittanceStatus.REJECTED)
+        saved_remittance, _ = self._transition_status(remittance_id, RemittanceStatus.REJECTED, note=note)
         return saved_remittance
 
 
