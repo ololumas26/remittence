@@ -53,6 +53,10 @@ class Remittance(SQLModel, table = True):
     # Snapshot do banco escolhido no destinatário, tal como o nome e o IBAN acima.
     recipient_bank_code : str | None = Field(nullable=True, max_length=4, default=None)
     status : RemittanceStatus = Field(default=RemittanceStatus.IN_PROGRESS, nullable=False)
+    # Motivo da rejeição, preenchido pelo staff ao rejeitar (ver PATCH /remittance/{id}/reject e
+    # RemittanceService.mark_as_rejected) — nullable porque remessas "In progress"/"Sent" nunca o
+    # têm, e remessas já rejeitadas antes deste campo existir também ficam sem ele.
+    note : str | None = Field(nullable=True, max_length=500, default=None)
     ip_address : str | None = Field(nullable=True, max_length=45, default=None)
     created_at : datetime = Field(default_factory=lambda : datetime.now(timezone.utc))
     updated_at : datetime = Field(nullable=True, default=None)

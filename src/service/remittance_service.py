@@ -10,8 +10,8 @@ from src.dto.remittance_dto import CreateRemittance
 from src.dto.filter import RemittanceFilterParams
 from src.model.client import Client
 from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
-from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date, get_18_year_date
+from src.service.kyc_service import KycService
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
 from src.service.notification_service import NotificationService
 from src.service.remittance_email_template import (
@@ -39,17 +39,12 @@ from uuid import UUID
 logger = logging.getLogger("remittance")
 
 
-# Documentos que servem como identificação pessoal — qualquer um destes, aprovado
-# e ainda válido, conta pra verificação de KYC. O comprovativo de morada é à parte.
-PERSONAL_DOCUMENT_TYPES = (DocumentType.BI, DocumentType.PASSAPORTE, DocumentType.TITULO_RESIDENCIA)
-
-
 class RemittanceService:
 
     def __init__(self, remittance_repository : RemittanceRepository, client_repository : ClientRepository,
                  document_repository : DocumentRepository, recipient_repository : RecipientRepository,
                  geolocation_service : GeolocationService, email_service : EmailService,
-                payment_repository : PaymentRepository):
+                payment_repository : PaymentRepository, kyc_service : KycService | None = None):
         self.remittance_repo = remittance_repository
         self.client_repo = client_repository
         self.document_repo = document_repository
@@ -57,6 +52,10 @@ class RemittanceService:
         self.geolocation_service = geolocation_service
         self.email_service = email_service
         self.payment_repo = payment_repository
+        # Regra "o que conta como documento de identificação válido" vive só em
+        # KycService agora — ver esse ficheiro. Continua opcional aqui para não
+        # obrigar todos os chamadores/testes existentes a passar mais um argumento.
+        self.kyc_service = kyc_service or KycService(document_repository)
 
     def _ensure_client_is_adult(self, client) -> None:
         # ClientService.create/update já bloqueiam data de nascimento <18 anos ao gravar — mas
@@ -71,26 +70,9 @@ class RemittanceService:
 
 
     def _ensure_client_is_verified(self, client_id : UUID) -> None:
-
-            documents = self.document_repo.get_by_client_id(client_id)
-            today = get_current_date()
-
-            has_valid_personal_document = any(
-                document.document_type in PERSONAL_DOCUMENT_TYPES
-                and document.status == DocumentStatus.APPROVED
-                and document.expiration_date >= today
-                for document in documents
-            )
-
-            #TODO: Reativar apenas quando melhorar a questão da submissão do comprovativo de morada
-            # has_valid_address_document = any(
-            #     document.document_type == DocumentType.COMPROVATIVO_MORADA
-            #     and document.status == DocumentStatus.APPROVED
-            #     and document.expiration_date >= today
-            #     for document in documents
-            # )
-
-            if not (has_valid_personal_document):
+            # O que conta como "documento válido" vive em KycService — ver esse
+            # ficheiro (também usado por GET /client/me/kyc-status).
+            if not self.kyc_service.is_verified(client_id):
                 raise ClientNotVerifiedError(
                     "Cliente precisa de ter um documento de identificação e um comprovativo de "
                     "morada aprovados e dentro da validade"
@@ -212,7 +194,9 @@ class RemittanceService:
             logger.exception("Falha ao preparar o email de remessa enviada para a remessa %s", remittance.id)
 
 
-    def _transition_status(self, remittance_id : str, new_status : RemittanceStatus) -> tuple[Remittance, bool]:
+    def _transition_status(
+        self, remittance_id : str, new_status : RemittanceStatus, note : str | None = None
+    ) -> tuple[Remittance, bool]:
         """Devolve (remessa, transicionou_agora). `transicionou_agora` é False quando a remessa já
         estava no estado pretendido — dois membros do staff a marcar a mesma remessa como enviada
         (em simultâneo, ou um a repetir um pedido que já tinha sido aceite) não deve dar erro ao
@@ -245,7 +229,7 @@ class RemittanceService:
             )
         # The reads above provide helpful errors; only the conditional UPDATE decides
         # whether this request wins. Do not mutate/save the earlier ORM snapshot.
-        updated = self.remittance_repo.transition_status(remittance.id, new_status)
+        updated = self.remittance_repo.transition_status(remittance.id, new_status, note=note)
         if updated is None:
             # Perdemos a corrida: outro pedido já tratou disto entretanto. Vê o que aconteceu antes
             # de decidir se é o mesmo pedido a repetir-se (idempotente) ou um conflito real.
@@ -280,14 +264,24 @@ class RemittanceService:
         return saved_remittance
 
 
-    def mark_as_rejected(self, remittance_id : str):
+    def mark_as_rejected(self, remittance_id : str, note : str):
 
-        saved_remittance, _ = self._transition_status(remittance_id, RemittanceStatus.REJECTED)
+        saved_remittance, _ = self._transition_status(remittance_id, RemittanceStatus.REJECTED, note=note)
         return saved_remittance
 
 
     def get_remittance_by_id(self, remittance_id : str):
         return self._get_or_raise(remittance_id)
+
+
+    def get_payment_status(self, remittance : Remittance) -> PaymentStatus | None:
+        """None quando a remessa não tem pagamento associado (só acontece em remessas antigas,
+        de antes da rota de pagamento existir — ver o comentário em payment_id no model)."""
+        if not remittance.payment_id:
+            return None
+
+        payment = self.payment_repo.get_by_id(remittance.payment_id)
+        return payment.status if payment else None
 
     def get_all(self, filter : RemittanceFilterParams):
         remittances = self.remittance_repo.get_all(

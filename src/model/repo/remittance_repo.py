@@ -23,11 +23,12 @@ class RemittanceRepository(ABC):
 
     @abstractmethod
     def transition_status(
-        self, remittance_id: UUID, new_status: RemittanceStatus
+        self, remittance_id: UUID, new_status: RemittanceStatus, note: str | None = None
     ) -> Remittance | None:
         """Commit a terminal transition only if still in progress (and paid for SENT).
 
-        Return None when no row satisfies the conditions; never overwrite a winner.
+        `note` is only ever set when transitioning to REJECTED (the rejection reason); ignored
+        for SENT. Return None when no row satisfies the conditions; never overwrite a winner.
         """
         raise NotImplementedError
 

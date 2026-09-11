@@ -5,6 +5,7 @@ from uuid import UUID
 
 from src.model.remittance import RemittanceStatus, AllowedCoins
 from src.model.payment_method import PaymentMethod
+from src.model.payment import PaymentStatus
 
 
 class CreateRemittance(BaseModel):
@@ -27,6 +28,13 @@ class CreateRemittance(BaseModel):
     payment_method: PaymentMethod
 
 
+class RejectRemittance(BaseModel):
+    """Corpo de PATCH /remittance/{id}/reject — o staff tem sempre de justificar a rejeição
+    (ver RemittanceService.mark_as_rejected); min_length evita uma nota em branco/só espaços."""
+
+    note: str = Field(min_length=3, max_length=500)
+
+
 class RemittanceOut(BaseModel):
     """DTO de saída: o que a API expõe sobre uma Remittance."""
 
@@ -46,5 +54,20 @@ class RemittanceOut(BaseModel):
     recipient_account_iban: str
     recipient_bank_code: str | None
     status: RemittanceStatus
+    # Motivo da rejeição — só preenchido em remessas Rejected (ver
+    # RemittanceService.mark_as_rejected); None para as restantes e para remessas rejeitadas
+    # antes deste campo existir.
+    note: str | None
     created_at: datetime
     updated_at: datetime | None
+    # Não vem direto do ORM (from_attributes não o preenche sozinho — Remittance não tem este
+    # atributo, só payment_id) — é montado à parte pelo controller, com
+    # RemittanceService.get_payment_status(), sempre que há um pagamento associado. É o que o
+    # frontend faz polling (GET /remittance/{id}) para saber quando um pagamento assíncrono (ex:
+    # MB WAY) passou de "Pending" a "Succeeded"/"Failed" — ver enviando.tsx no frontend.
+    payment_status: PaymentStatus | None = None
+    # Só preenchido para pagamentos que precisam que o cliente confirme fora da app (hoje só MB
+    # WAY, via Checkout Session) — o URL da página hospedada da Stripe. Também montado à parte
+    # pelo controller, a partir do que PaymentService.execute_payment devolve; None nos outros
+    # métodos e para remessas já existentes lidas via GET /remittance/{id}.
+    payment_redirect_url: str | None = None

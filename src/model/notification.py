@@ -10,6 +10,8 @@ class NotificationType(str, Enum):
     REMITTANCE_CREATED = "remittance_created"
     REMITTANCE_SENT = "remittance_sent"
     REMITTANCE_REJECTED = "remittance_rejected"
+    DOCUMENT_APPROVED = "document_approved"
+    DOCUMENT_REJECTED = "document_rejected"
 
 
 class Notification(SQLModel, table=True):
@@ -19,6 +21,15 @@ class Notification(SQLModel, table=True):
             "remittance_id",
             "type",
             name="uq_notification_remittance_type",
+        ),
+        # Mesma ideia da constraint acima, só que para notificações de documentos — como
+        # remittance_id e document_id nunca estão os dois preenchidos na mesma notificação, e
+        # NULL nunca colide consigo mesmo numa UNIQUE constraint, as duas constraints não se
+        # atrapalham: cada uma só "está ativa" para o tipo de notificação a que pertence.
+        UniqueConstraint(
+            "document_id",
+            "type",
+            name="uq_notification_document_type",
         ),
         Index("ix_notification_client_created_at", "client_id", "created_at"),
         Index(
@@ -33,6 +44,11 @@ class Notification(SQLModel, table=True):
     client_id: uuid.UUID = Field(foreign_key="client.id", nullable=False)
     remittance_id: uuid.UUID | None = Field(
         foreign_key="remittance.id",
+        nullable=True,
+        default=None,
+    )
+    document_id: uuid.UUID | None = Field(
+        foreign_key="document.id",
         nullable=True,
         default=None,
     )

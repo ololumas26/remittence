@@ -78,3 +78,6 @@ class FileStorageService:
 
     def delete_previous(self, file_path : str):
         self.supabase_file_storage.delete(file_path)
+
+    def get_signed_url(self, file_path : str, expires_in : int = 300) -> str:
+        return self.supabase_file_storage.get_signed_url(file_path, expires_in)

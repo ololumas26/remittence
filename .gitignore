@@ -6,3 +6,7 @@ venv/
 .env
 *.mmdb
 .DS_Store
+
+# scratch files não relacionados com a app
+/ze.py
+/zextract.py

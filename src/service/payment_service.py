@@ -1,8 +1,12 @@
 import logging
+import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
+from uuid import UUID
 
 from src.dto.payment_dto import CreatePayment
+from src.dto.filter import PaymentFilterParams
 from abc import ABC, abstractmethod
 from src.service.remittance_service import RemittanceService
 from src.model.payment_method import PaymentMethod
@@ -16,15 +20,34 @@ from src.external.service.stripe_mbway_service import (
     EVENT_PAYMENT_SUCCEEDED,
     StripeMbwayGateway,
 )
-from src.exception.exceptions import InvalidPaymentCallbackError, InvalidPaymentDataError
+from src.exception.exceptions import InvalidPaymentCallbackError
 
 logger = logging.getLogger("remittance")
+
+# Deep link de regresso à app depois da página de Checkout MB WAY (ver StripeMbwayGateway.
+# create_checkout_session) — "enviando" é a mesma rota para onde resumo.tsx já navega depois de
+# submeter, e o polling que já lá existe (getPaymentStatus) trata tanto o sucesso como o cancelar/
+# abandonar a página da Stripe (fica Pending até dar timeout, ver enviando.tsx). Configurável por
+# se um dia houver mais que um scheme (ex: build de preview vs. produção).
+MBWAY_CHECKOUT_RETURN_URL = os.environ.get("MBWAY_CHECKOUT_RETURN_URL", "sentchu://enviando")
+
+
+@dataclass
+class PaymentExecutionResult:
+    """O que um ProcessarPagamento.execute devolve: a referência a guardar em
+    Payment.provider_reference e, quando o método precisa que o cliente confirme nalgum sítio
+    fora da app (hoje só o MB WAY, via Checkout Session), o URL para lá navegar."""
+
+    provider_reference: str | None
+    redirect_url: str | None = None
 
 
 class ProcessarPagamento(ABC):
     @abstractmethod
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> str:
-        raise NotImplemented
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
+        raise NotImplementedError
 
 
 class Mbway(ProcessarPagamento):
@@ -34,38 +57,42 @@ class Mbway(ProcessarPagamento):
     def __init__(self, gateway: StripeMbwayGateway | None = None):
         self.gateway = gateway or StripeMbwayGateway()
 
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> str:
-        # O número de telemóvel tem de vir explícito no bloco 'mbway' do pedido — é para esse
-        # número que a Stripe envia a notificação push a pedir a confirmação do pagamento.
-        phone_number = create_payment.mbway.phone_number if create_payment.mbway else None
-
-        if not phone_number:
-            raise InvalidPaymentDataError("Número de telemóvel em falta para o pagamento MB WAY")
-
-        # Id do PaymentIntent da Stripe: é o que liga o webhook assíncrono de confirmação (ver
-        # PaymentService.handle_stripe_webhook) de volta a este Payment.
-        return self.gateway.request_payment(
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
+        # O número de telemóvel já não é usado aqui — passou a ser a própria página de Checkout
+        # da Stripe a pedi-lo ao cliente (é aí, do lado do cliente, que a confirmação realmente
+        # acontece e a notificação push é disparada; ver o comentário em StripeMbwayGateway).
+        # O campo mbway.phone_number no pedido fica só por compatibilidade com o frontend atual.
+        checkout_url, session_id = self.gateway.create_checkout_session(
             order_id=str(payment.id),
             amount=payment.amount,
-            phone_number=phone_number,
+            success_url=f"{MBWAY_CHECKOUT_RETURN_URL}?id={payment.id}&paymentMethod=mbway",
+            cancel_url=f"{MBWAY_CHECKOUT_RETURN_URL}?id={payment.id}&paymentMethod=mbway",
+            customer_email=customer_email,
         )
+        return PaymentExecutionResult(provider_reference=session_id, redirect_url=checkout_url)
 
 
 class CreditDebitCard(ProcessarPagamento):
 
     method = 'credit_debit'
     
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> str:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         """Chamar a stripe e processar o pagamwnto por cartão de crédito ou débito"""
         print("Executando pagamento por cartão")
-        return "ID do pagamento"
+        return PaymentExecutionResult(provider_reference="ID do pagamento")
 
 class MultibankReference(ProcessarPagamento):
     method = 'multibank'
-    def execute(self, payment: Payment, create_payment: CreatePayment) -> str:
+    def execute(
+        self, payment: Payment, create_payment: CreatePayment, customer_email: str | None = None
+    ) -> PaymentExecutionResult:
         """Chamar a stripe e processar o pagamwnto por referência multibanco"""
         print("Executando pagamento por multibanco")
-        return "ID do pagamento"
+        return PaymentExecutionResult(provider_reference="ID do pagamento")
 
 class PaymentService:
 
@@ -85,16 +112,32 @@ class PaymentService:
             PaymentMethod.CARD: CreditDebitCard(),
             PaymentMethod.MULTIBANK: MultibankReference()}
 
-    def execute_payment(self, create_payment : CreatePayment, ip_address: str = "") -> Remittance:
+    def get_all(self, filter : PaymentFilterParams):
+        payments = self.payment_repo.get_all(
+            limit=filter.limit,
+            offset=filter.offset,
+            order_by=filter.order_by,
+            client_id=filter.client_id,
+            status=filter.status,
+        )
+        total = self.payment_repo.count(client_id=filter.client_id, status=filter.status)
+
+        return payments, total
+
+    def execute_payment(
+        self, create_payment : CreatePayment, ip_address: str = ""
+    ) -> tuple[Remittance, Payment, str | None]:
         create_remittance = create_payment.remittance
         payment_method = create_remittance.payment_method
         processor : ProcessarPagamento = self.payment_methods[payment_method]
 
         # O Payment é construído (id incluído — default_factory=uuid.uuid4 em Payment, gerado em
         # memória, não pela base de dados) antes de chamar o processador, porque o próprio id
-        # serve de orderId/idempotency key no pedido à Stripe: é assim que o webhook de
-        # confirmação (que só traz o id do PaymentIntent) consegue voltar a encontrar este
-        # Payment depois — ver provider_reference guardado abaixo.
+        # serve de orderId no pedido à Stripe (metadata.order_id) — é assim que o webhook de
+        # confirmação consegue voltar a encontrar este Payment depois, mesmo sem conhecer
+        # antecipadamente o id do PaymentIntent (ver _get_payment_for_callback e o comentário em
+        # StripeMbwayGateway.create_checkout_session sobre a Checkout Session não criar o
+        # PaymentIntent de forma síncrona).
         payment = Payment(
             client_id=create_remittance.client_id,
             method=payment_method,
@@ -102,20 +145,29 @@ class PaymentService:
             amount=create_remittance.amount,
         )
 
-        # Tal como antes: build_remittance só valida e constrói em memória, nada é gravado até ao
+        # build_remittance só valida e constrói em memória, nada é gravado até ao
         # payment_transaction_repo.save() mais abaixo — uma remessa nunca fica gravada sem que o
         # pedido de pagamento correspondente tenha sido aceite primeiro (processor.execute()
-        # levanta PaymentGatewayError/InvalidPaymentDataError e interrompe tudo antes disso).
-        provider_reference = processor.execute(payment, create_payment)
-        payment.provider_reference = provider_reference
-
+        # levanta PaymentGatewayError interrompe tudo antes disso). Corre antes do processor.
+        # execute() por duas razões: falha mais cedo (validações de destinatário/montante) sem
+        # sequer chegar a criar uma Checkout Session na Stripe por nada, e dá-nos o email do
+        # cliente a tempo de o passar para a Session (Stripe.checkout.Session.create(
+        # customer_email=...)) — sem isto o campo de email na página da Stripe fica sempre vazio.
         remittance, client = self.remittance_service.build_remittance(create_remittance, ip_address=ip_address)
+
+        result = processor.execute(payment, create_payment, customer_email=client.email)
+        payment.provider_reference = result.provider_reference
+
         notification = NotificationService.for_remittance_created(remittance)
         saved_payment, saved_remittance = self.payment_transaction_repo.save(
             payment, remittance, notification
         )
         self.remittance_service.send_created_email(client, saved_remittance)
-        return saved_remittance
+        # (remittance, payment, redirect_url): o controller precisa dos três — payment_status
+        # para o polling que o frontend já fazia (ver enviando.tsx) e redirect_url (só presente
+        # para MB WAY, via Checkout Session) para o frontend saber que tem de abrir essa página
+        # antes de começar a fazer polling.
+        return saved_remittance, saved_payment, result.redirect_url
 
     def handle_stripe_webhook(self, payload: bytes, signature: str | None) -> None:
         """Trata um webhook da Stripe (ver payment_controller.stripe_webhook). Nunca chamado pelo
@@ -135,11 +187,33 @@ class PaymentService:
             self._fail_payment(event["data"]["object"].to_dict())
 
     def _get_payment_for_callback(self, payment_intent: dict) -> Payment:
+        # A Checkout Session (ver StripeMbwayGateway.create_checkout_session) não cria o
+        # PaymentIntent de forma síncrona, por isso Payment.provider_reference começa como o id
+        # da Session ("cs_..."), não do PaymentIntent ("pi_...") — o evento do webhook só nos traz
+        # este último. É por isso que a chave principal para encontrar o Payment passa a ser a
+        # metadata.order_id (o próprio Payment.id, que definimos em Mbway.execute), propagada
+        # automaticamente da Session para o PaymentIntent que ela cria. get_by_provider_reference
+        # fica como fallback para qualquer método de pagamento futuro que continue a ter o id do
+        # provider disponível de forma síncrona.
+        order_id = (payment_intent.get("metadata") or {}).get("order_id")
+        payment = None
+
+        if order_id:
+            try:
+                payment = self.payment_repo.get_by_id(UUID(order_id))
+            except (ValueError, TypeError):
+                payment = None
+
         provider_reference = payment_intent.get("id")
-        payment = self.payment_repo.get_by_provider_reference(provider_reference) if provider_reference else None
+
+        if not payment and provider_reference:
+            payment = self.payment_repo.get_by_provider_reference(provider_reference)
 
         if not payment:
-            logger.warning("Webhook Stripe para um provider_reference desconhecido: %s", provider_reference)
+            logger.warning(
+                "Webhook Stripe sem Payment correspondente (order_id=%s, provider_reference=%s)",
+                order_id, provider_reference,
+            )
             raise InvalidPaymentCallbackError("Pagamento não encontrado")
 
         expected_cents = int((payment.amount * 100).quantize(Decimal("1")))
@@ -174,6 +248,10 @@ class PaymentService:
             raise InvalidPaymentCallbackError("Pagamento já não está pendente")
 
         payment.status = PaymentStatus.SUCCEEDED
+        # Agora que o webhook nos deu o id real do PaymentIntent, substitui o id da Checkout
+        # Session que lá estava desde a criação (ver _get_payment_for_callback) — fica o valor
+        # definitivo e mais útil para ir ver o pagamento no dashboard da Stripe.
+        payment.provider_reference = payment_intent.get("id") or payment.provider_reference
         payment.updated_at = datetime.now(timezone.utc)
 
         return self.payment_repo.save(payment)
@@ -192,6 +270,7 @@ class PaymentService:
 
         payment.status = PaymentStatus.FAILED
         payment.failure_reason = failure_reason[:255]
+        payment.provider_reference = payment_intent.get("id") or payment.provider_reference
         payment.updated_at = datetime.now(timezone.utc)
 
         return self.payment_repo.save(payment)

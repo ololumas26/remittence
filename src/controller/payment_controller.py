@@ -1,15 +1,35 @@
-from fastapi import APIRouter, Depends, Request, status
+from typing import Annotated
+from fastapi import APIRouter, Depends, Query, Request, status
 from src.constant.app_constant import APP_PREFIX
 from src.controller.dependency import get_payment_service, get_current_client
 from src.security.rate_limit import limiter
 from src.service.payment_service import PaymentService
 from src.dto.payment_dto import CreatePayment
+from src.dto.remittance_dto import RemittanceOut
+from src.dto.admin_dto import PaymentAdminOut
+from src.dto.filter import PaymentFilterParams
+from src.dto.response import success_response, paginated_response
 from src.model.client import Client
+from src.security.dependencies import require_staff, Role
 
 from src.database.db import session_DP
 from sqlmodel import Session
 from src.security.client_ip import get_client_ip
 payment_route = APIRouter(prefix=f'{APP_PREFIX}/payment', tags=['payment'])
+
+
+@payment_route.get("/admin/all")
+@limiter.limit("30/minute")
+def get_all_admin(
+    request : Request,
+    filter : Annotated[PaymentFilterParams, Query()],
+    payment_service : PaymentService = Depends(get_payment_service),
+    _ : Role = Depends(require_staff),
+):
+    payments, total = payment_service.get_all(filter)
+    data = [PaymentAdminOut.model_validate(payment) for payment in payments]
+
+    return paginated_response(data=data, total=total, limit=filter.limit, offset=filter.offset)
 
 
 @payment_route.post('/')
@@ -24,8 +44,16 @@ def submit(
     # submeter remessas em seu próprio nome — ignora/sobrepõe qualquer client_id vindo do corpo
     # do pedido (agora aninhado em create_payment.remittance, não mais direto no corpo).
     create_payment.remittance.client_id = client.id
-    payment_service.execute_payment(create_payment, ip_address=get_client_ip(request))
-    return "Rota de pagamento"
+    remittance, payment, redirect_url = payment_service.execute_payment(
+        create_payment, ip_address=get_client_ip(request)
+    )
+    remittance_out = RemittanceOut.model_validate(remittance)
+    remittance_out.payment_status = payment.status
+    remittance_out.payment_redirect_url = redirect_url
+    return success_response(
+        data=remittance_out,
+        message="Pagamento iniciado",
+    )
 
 
 @payment_route.post('/stripe/webhook')

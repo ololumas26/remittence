@@ -32,12 +32,14 @@ class FakeRemittanceRepo:
     def get_by_id(self, remittance_id):
         return self._by_id.get(remittance_id)
 
-    def transition_status(self, remittance_id, new_status):
+    def transition_status(self, remittance_id, new_status, note=None):
         self.transition_calls += 1
         current = self._by_id[remittance_id]
         if current.status != RemittanceStatus.IN_PROGRESS:
             return None
         current.status = new_status
+        if note is not None:
+            current.note = note
         return current
 
 
@@ -45,7 +47,7 @@ class RacingRemittanceRepo(FakeRemittanceRepo):
     """Simula um concorrente que vence a corrida entre a leitura e o UPDATE condicional:
     a primeira chamada a transition_status já encontra o estado mudado por "outro pedido"."""
 
-    def transition_status(self, remittance_id, new_status):
+    def transition_status(self, remittance_id, new_status, note=None):
         current = self._by_id[remittance_id]
         # O "concorrente" já ganhou antes desta transação correr.
         current.status = new_status
@@ -149,3 +151,49 @@ class TestTransitionIdempotency:
 
         with pytest.raises(ResourceNotFoundError):
             service.mark_as_sent(str(remittance.id))
+
+    def test_marcar_como_rejeitada_grava_o_motivo(self):
+        remittance = make_remittance()
+        repo = FakeRemittanceRepo(remittance)
+        service = make_service(repo)
+
+        rejected = service.mark_as_rejected(str(remittance.id), note="IBAN inválido")
+
+        assert rejected.status == RemittanceStatus.REJECTED
+        assert rejected.note == "IBAN inválido"
+
+    def test_repetir_rejeicao_e_idempotente_e_nao_pisa_o_motivo(self):
+        remittance = make_remittance()
+        repo = FakeRemittanceRepo(remittance)
+        service = make_service(repo)
+
+        first = service.mark_as_rejected(str(remittance.id), note="IBAN inválido")
+        assert first.note == "IBAN inválido"
+
+        # Já está Rejected — _transition_status devolve cedo (mesmo estado), nunca chega a
+        # chamar o repo outra vez, por isso o motivo original nunca é substituído.
+        second = service.mark_as_rejected(str(remittance.id), note="motivo diferente, ignorado")
+        assert second.note == "IBAN inválido"
+        assert repo.transition_calls == 1
+
+
+class TestGetPaymentStatus:
+    """RemittanceService.get_payment_status — usado pelo GET /remittance/{id} para o frontend
+    fazer polling (ver enviando.tsx) enquanto um pagamento assíncrono (MB WAY) ainda está
+    'Pending'."""
+
+    def test_devolve_o_estado_do_pagamento_associado(self):
+        payment = Payment(id=uuid4(), status=PaymentStatus.PENDING)
+        remittance = make_remittance(payment_id=payment.id)
+        service = make_service(FakeRemittanceRepo(remittance), payment=payment)
+
+        assert service.get_payment_status(remittance) == PaymentStatus.PENDING
+
+    def test_devolve_none_quando_a_remessa_nao_tem_pagamento_associado(self):
+        # make_remittance() sempre atribui um payment_id (payment_id or uuid4()) — aqui é
+        # importante mesmo não ter nenhum, por isso constrói-se a remessa à parte.
+        remittance = make_remittance()
+        remittance.payment_id = None
+        service = make_service(FakeRemittanceRepo(remittance), payment=None)
+
+        assert service.get_payment_status(remittance) is None

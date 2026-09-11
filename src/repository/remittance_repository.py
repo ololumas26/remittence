@@ -25,16 +25,20 @@ class SqlRemittanceRepository():
         return remittance
 
     def transition_status(
-        self, remittance_id: UUID, new_status: RemittanceStatus
+        self, remittance_id: UUID, new_status: RemittanceStatus, note: str | None = None
     ) -> Remittance | None:
         if new_status not in (RemittanceStatus.SENT, RemittanceStatus.REJECTED):
             raise ValueError("A transição tem de ser para Sent ou Rejected")
+
+        values = {"status": new_status, "updated_at": datetime.now(timezone.utc)}
+        if note is not None:
+            values["note"] = note
 
         statement = (
             update(Remittance)
             .where(Remittance.id == remittance_id,
                    Remittance.status == RemittanceStatus.IN_PROGRESS)
-            .values(status=new_status, updated_at=datetime.now(timezone.utc))
+            .values(**values)
         )
         if new_status == RemittanceStatus.SENT:
             # Recheck payment in SQL too: a previously loaded ORM object can be stale.

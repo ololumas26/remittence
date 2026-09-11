@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import date, datetime
 from uuid import UUID
 
@@ -35,6 +35,13 @@ class UpdateDocument(BaseModel):
         return value
 
 
+class RejectDocument(BaseModel):
+    """Corpo de PATCH /document/{id}/reject — o staff tem sempre de justificar a rejeição
+    (ver DocumentService.reject); min_length evita uma nota em branco/só espaços."""
+
+    note: str = Field(min_length=3, max_length=500)
+
+
 class DocumentOut(BaseModel):
     """DTO de saída: o que a API expõe sobre um Document."""
 
@@ -48,5 +55,14 @@ class DocumentOut(BaseModel):
     is_expired: bool
     status: DocumentStatus
     file_path: str | None
+    note: str | None
     created_at: datetime
     updated_at: datetime | None
+
+
+class DocumentFileUrlOut(BaseModel):
+    """Link assinado e de curta duração para o ficheiro de um documento — nunca o file_path
+    em bruto, para não depender da política do bucket no Supabase Storage."""
+
+    url: str
+    expires_in: int

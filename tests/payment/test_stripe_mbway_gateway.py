@@ -1,8 +1,8 @@
 """
-StripeMbwayGateway isolado: request_payment (cria+confirma o PaymentIntent) e verify_webhook
-(valida a assinatura do webhook). Nenhuma chamada de rede real — stripe.PaymentIntent.create e
-stripe.Webhook.construct_event são substituídos (monkeypatch). O resto do fluxo é testado em
-test_payment_service_mbway.py com um gateway falso.
+StripeMbwayGateway isolado: create_checkout_session (cria a Checkout Session MB WAY) e
+verify_webhook (valida a assinatura do webhook). Nenhuma chamada de rede real —
+stripe.checkout.Session.create e stripe.Webhook.construct_event são substituídos (monkeypatch).
+O resto do fluxo é testado em test_payment_service_mbway.py com um gateway falso.
 """
 
 from decimal import Decimal
@@ -15,58 +15,83 @@ from src.exception.exceptions import InvalidPaymentCallbackError, PaymentGateway
 from src.external.service.stripe_mbway_service import StripeMbwayGateway
 
 
-def test_request_payment_devolve_o_id_do_payment_intent(monkeypatch):
+def test_create_checkout_session_devolve_url_e_id_da_session(monkeypatch):
     captured = {}
 
     def fake_create(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(id="pi_123")
+        return SimpleNamespace(url="https://checkout.stripe.com/c/pay/cs_123", id="cs_123")
 
-    monkeypatch.setattr(stripe.PaymentIntent, "create", staticmethod(fake_create))
+    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(fake_create))
     gateway = StripeMbwayGateway(api_key="sk_test_123")
 
-    request_id = gateway.request_payment(order_id="order-1", amount=Decimal("50.00"), phone_number="912345678")
+    checkout_url, session_id = gateway.create_checkout_session(
+        order_id="order-1",
+        amount=Decimal("50.00"),
+        success_url="sentchu://enviando?id=order-1&paymentMethod=mbway",
+        cancel_url="sentchu://enviando?id=order-1&paymentMethod=mbway",
+        customer_email="cliente@example.com",
+    )
 
-    assert request_id == "pi_123"
-    assert captured["amount"] == 5000
-    assert captured["currency"] == "eur"
+    assert checkout_url == "https://checkout.stripe.com/c/pay/cs_123"
+    assert session_id == "cs_123"
+    assert captured["mode"] == "payment"
     assert captured["payment_method_types"] == ["mb_way"]
-    assert captured["payment_method_data"]["billing_details"]["phone"] == "+351912345678"
-    assert captured["confirm"] is True
+    assert captured["line_items"][0]["price_data"]["currency"] == "eur"
+    assert captured["line_items"][0]["price_data"]["unit_amount"] == 5000
+    assert captured["payment_intent_data"]["metadata"]["order_id"] == "order-1"
+    assert captured["success_url"] == "sentchu://enviando?id=order-1&paymentMethod=mbway"
+    assert captured["customer_email"] == "cliente@example.com"
+    assert captured["origin_context"] == "mobile_app"
     assert captured["idempotency_key"] == "order-1"
 
 
-def test_request_payment_formata_numero_ja_com_indicativo(monkeypatch):
+def test_create_checkout_session_sem_email_nao_manda_o_parametro(monkeypatch):
     captured = {}
 
     def fake_create(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(id="pi_123")
+        return SimpleNamespace(url="https://checkout.stripe.com/c/pay/cs_123", id="cs_123")
 
-    monkeypatch.setattr(stripe.PaymentIntent, "create", staticmethod(fake_create))
+    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(fake_create))
     gateway = StripeMbwayGateway(api_key="sk_test_123")
 
-    gateway.request_payment(order_id="order-1", amount=Decimal("50.00"), phone_number="+351912345678")
+    gateway.create_checkout_session(
+        order_id="order-1",
+        amount=Decimal("50.00"),
+        success_url="sentchu://enviando",
+        cancel_url="sentchu://enviando",
+    )
 
-    assert captured["payment_method_data"]["billing_details"]["phone"] == "+351912345678"
+    assert "customer_email" not in captured
 
 
-def test_request_payment_levanta_gateway_error_quando_stripe_recusa(monkeypatch):
+def test_create_checkout_session_levanta_gateway_error_quando_stripe_recusa(monkeypatch):
     def fake_create(**kwargs):
         raise stripe.CardError("recusado", param=None, code=None)
 
-    monkeypatch.setattr(stripe.PaymentIntent, "create", staticmethod(fake_create))
+    monkeypatch.setattr(stripe.checkout.Session, "create", staticmethod(fake_create))
     gateway = StripeMbwayGateway(api_key="sk_test_123")
 
     with pytest.raises(PaymentGatewayError):
-        gateway.request_payment(order_id="order-1", amount=Decimal("50.00"), phone_number="912345678")
+        gateway.create_checkout_session(
+            order_id="order-1",
+            amount=Decimal("50.00"),
+            success_url="sentchu://enviando",
+            cancel_url="sentchu://enviando",
+        )
 
 
-def test_request_payment_levanta_gateway_error_sem_chave_configurada():
+def test_create_checkout_session_levanta_gateway_error_sem_chave_configurada():
     gateway = StripeMbwayGateway(api_key=None)
 
     with pytest.raises(PaymentGatewayError):
-        gateway.request_payment(order_id="order-1", amount=Decimal("50.00"), phone_number="912345678")
+        gateway.create_checkout_session(
+            order_id="order-1",
+            amount=Decimal("50.00"),
+            success_url="sentchu://enviando",
+            cancel_url="sentchu://enviando",
+        )
 
 
 def test_verify_webhook_devolve_o_evento_quando_assinatura_valida(monkeypatch):

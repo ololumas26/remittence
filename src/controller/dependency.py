@@ -1,5 +1,6 @@
 from uuid import UUID
 from src.service.document_service import DocumentService
+from src.service.kyc_service import KycService
 from src.service.remittance_service import RemittanceService
 from src.service.recipient_service import RecipientService
 from src.service.client_service import ClientService
@@ -32,10 +33,8 @@ from src.repository.payment_repository import SqlPaymentRepository
 # partir deste módulo.
 
 
-def get_document_service(session : session_DP):
-    file_storage = SupabaseFileStorage(admin_client)
-    file_storage_service = FileStorageService(file_storage)
-    return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session),file_storage_service)
+def get_kyc_service(session : session_DP):
+    return KycService(SqlDocumentRepository(session))
 
 
 # Uma única instância partilhada: o Reader do geoip2 abre o ficheiro .mmdb
@@ -56,6 +55,15 @@ def get_email_service() -> EmailService:
     return _email_service
 
 
+def get_document_service(
+    session : session_DP,
+    email_service : EmailService = Depends(get_email_service),
+):
+    file_storage = SupabaseFileStorage(admin_client)
+    file_storage_service = FileStorageService(file_storage)
+    return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session), file_storage_service, email_service)
+
+
 # Mesma razão da instância partilhada acima: o gateway não guarda estado entre pedidos (as
 # chaves da Stripe só são lidas do ambiente uma vez, ver stripe_mbway_service.py).
 _stripe_mbway_gateway = StripeMbwayGateway()
@@ -73,6 +81,7 @@ def get_remittance_service(
     session : session_DP,
     geolocation_service : GeolocationService = Depends(get_geolocation_service),
     email_service : EmailService = Depends(get_email_service),
+    kyc_service : KycService = Depends(get_kyc_service),
 ):
     return RemittanceService(
         SqlRemittanceRepository(session),
@@ -81,7 +90,8 @@ def get_remittance_service(
         SqlRecipientRepository(session),
         geolocation_service,
         email_service,
-        SqlPaymentRepository(session)
+        SqlPaymentRepository(session),
+        kyc_service,
     )
 
 
