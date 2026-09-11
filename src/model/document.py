@@ -29,6 +29,7 @@ class Document(SQLModel, table = True):
     expiration_date : date = Field(nullable=False)
     file_path : str = Field(sa_type=Text, nullable=True)
     status : DocumentStatus = Field(default=DocumentStatus.PENDING)
+    note : str | None = Field(nullable=True, max_length=500, default=None)
     created_at : datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at : datetime = Field(nullable=True, default=None)
 

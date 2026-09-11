@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import date, datetime
 from uuid import UUID
 
@@ -35,6 +35,24 @@ class UpdateDocument(BaseModel):
         return value
 
 
+class RejectDocument(BaseModel):
+    """Corpo de PATCH /document/{id}/reject — o staff tem sempre de justificar a rejeição
+    (ver DocumentService.reject)."""
+
+    note: str = Field(min_length=3, max_length=500)
+
+    @field_validator('note', mode='after')
+    @classmethod
+    def validate_not_blank(cls, value: str):
+        # min_length sozinho não chega: "   " tem 3 caracteres mas não é uma justificação —
+        # mesmo problema que document_number já trata em CreateDocument/UpdateDocument acima.
+        stripped = value.strip()
+        if stripped == '':
+            raise ValueError("Este campo não pode estar vazio")
+
+        return stripped
+
+
 class DocumentOut(BaseModel):
     """DTO de saída: o que a API expõe sobre um Document."""
 
@@ -48,5 +66,6 @@ class DocumentOut(BaseModel):
     is_expired: bool
     status: DocumentStatus
     file_path: str | None
+    note: str | None
     created_at: datetime
     updated_at: datetime | None

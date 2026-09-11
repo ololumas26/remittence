@@ -127,9 +127,10 @@ class DocumentService:
         return self.document_repo.save(document)
 
 
-    def reject(self, document_id : str) -> Document:
+    def reject(self, document_id : str, note : str) -> Document:
 
         document = self._transition_status(document_id, DocumentStatus.REJECTED)
+        document.note = note
         return self.document_repo.save(document)
 
     def get_by_id(self, document_id : str) -> Document:

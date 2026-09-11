@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, Form
 from src.constant.app_constant import APP_PREFIX
-from src.dto.document_dto import CreateDocument, UpdateDocument, DocumentOut
+from src.dto.document_dto import CreateDocument, UpdateDocument, RejectDocument, DocumentOut
 from src.controller.dependency import get_document_service, get_current_client
 from src.security.rate_limit import limiter
 from src.service.document_service import DocumentService
@@ -128,10 +128,11 @@ def approve(
 def reject(
     request : Request,
     id,
+    reject_data : RejectDocument,
     document_service : DocumentService = Depends(get_document_service),
     _ : Role = Depends(require_staff),
 ):
-    document = document_service.reject(id)
+    document = document_service.reject(id, note=reject_data.note)
     return success_response(
         data=DocumentOut.model_validate(document),
         message="Documento rejeitado",
