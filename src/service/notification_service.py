@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from src.exception.exceptions import InvalidIdentifierError, ResourceNotFoundError
+from src.model.document import Document
 from src.model.notification import Notification, NotificationType
 from src.model.remittance import Remittance
 from src.model.repo.notification_repo import NotificationRepository
@@ -24,6 +25,26 @@ class NotificationService:
             type=NotificationType.REMITTANCE_CREATED,
             title="Remessa criada",
             message=f"A tua remessa de {amount} EUR para {remittance.recipient_name} foi criada.",
+        )
+
+    @staticmethod
+    def for_document_approved(document: Document) -> Notification:
+        return Notification(
+            client_id=document.client_id,
+            document_id=document.id,
+            type=NotificationType.DOCUMENT_APPROVED,
+            title="Documento aprovado",
+            message=f"O teu documento ({document.document_type.value}) foi aprovado.",
+        )
+
+    @staticmethod
+    def for_document_rejected(document: Document, note: str) -> Notification:
+        return Notification(
+            client_id=document.client_id,
+            document_id=document.id,
+            type=NotificationType.DOCUMENT_REJECTED,
+            title="Documento rejeitado",
+            message=f"O teu documento ({document.document_type.value}) foi rejeitado: {note}",
         )
 
     def get_all(self, client_id: UUID, limit: int, offset: int):

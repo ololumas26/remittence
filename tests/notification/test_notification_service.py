@@ -10,6 +10,7 @@ from src.model.document import Document  # noqa: F401
 from src.model.payment import Payment  # noqa: F401
 from src.model.recipient import Recipient  # noqa: F401
 from src.exception.exceptions import InvalidIdentifierError, ResourceNotFoundError
+from src.model.document import DocumentType
 from src.model.notification import Notification, NotificationType
 from src.service.notification_service import NotificationService
 
@@ -64,6 +65,43 @@ def test_builds_remittance_created_notification():
     assert notification.title == "Remessa criada"
     assert "150.00 EUR" in notification.message
     assert "Maria Silva" in notification.message
+
+
+def test_builds_document_approved_notification():
+    client_id = uuid4()
+    document_id = uuid4()
+    document = SimpleNamespace(
+        id=document_id,
+        client_id=client_id,
+        document_type=DocumentType.BI,
+    )
+
+    notification = NotificationService.for_document_approved(document)
+
+    assert notification.client_id == client_id
+    assert notification.document_id == document_id
+    assert notification.type == NotificationType.DOCUMENT_APPROVED
+    assert notification.title == "Documento aprovado"
+    assert DocumentType.BI.value in notification.message
+
+
+def test_builds_document_rejected_notification_with_note():
+    client_id = uuid4()
+    document_id = uuid4()
+    document = SimpleNamespace(
+        id=document_id,
+        client_id=client_id,
+        document_type=DocumentType.PASSAPORTE,
+    )
+
+    notification = NotificationService.for_document_rejected(document, "Foto ilegível")
+
+    assert notification.client_id == client_id
+    assert notification.document_id == document_id
+    assert notification.type == NotificationType.DOCUMENT_REJECTED
+    assert notification.title == "Documento rejeitado"
+    assert DocumentType.PASSAPORTE.value in notification.message
+    assert "Foto ilegível" in notification.message
 
 
 def test_mark_as_read_is_idempotent_and_restricted_to_owner():

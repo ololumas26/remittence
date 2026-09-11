@@ -1,6 +1,7 @@
 from src.model.repo.document_repo import DocumentRepository
 from sqlmodel import Session, select, func
 from src.model.document import Document
+from src.model.notification import Notification
 from uuid import UUID
 
 
@@ -44,6 +45,23 @@ class SqlDocumentRepository():
         self.db.commit()
         self.db.refresh(document)
 
+        return document
+
+    def save_with_notification(self, document : Document, notification : Notification) -> Document:
+        try:
+            self.db.add(document)
+            # Sem uma Relationship ORM entre Notification e Document, o unit of work não
+            # garante a ordem dos INSERTs só porque existe uma FK na tabela — o flush mantém a
+            # mesma transação, mas materializa primeiro o documento referenciado (mesma técnica
+            # de RemittanceRepository.save_with_notification).
+            self.db.flush()
+            self.db.add(notification)
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
+
+        self.db.refresh(document)
         return document
 
     def delete(self, document : Document):

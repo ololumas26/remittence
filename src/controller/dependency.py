@@ -33,12 +33,6 @@ from src.repository.payment_repository import SqlPaymentRepository
 # partir deste módulo.
 
 
-def get_document_service(session : session_DP):
-    file_storage = SupabaseFileStorage(admin_client)
-    file_storage_service = FileStorageService(file_storage)
-    return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session),file_storage_service)
-
-
 def get_kyc_service(session : session_DP):
     return KycService(SqlDocumentRepository(session))
 
@@ -59,6 +53,15 @@ _email_service = EmailService()
 
 def get_email_service() -> EmailService:
     return _email_service
+
+
+def get_document_service(
+    session : session_DP,
+    email_service : EmailService = Depends(get_email_service),
+):
+    file_storage = SupabaseFileStorage(admin_client)
+    file_storage_service = FileStorageService(file_storage)
+    return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session), file_storage_service, email_service)
 
 
 # Mesma razão da instância partilhada acima: o gateway não guarda estado entre pedidos (as

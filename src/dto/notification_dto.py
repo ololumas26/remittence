@@ -11,6 +11,7 @@ class NotificationOut(BaseModel):
 
     id: UUID
     remittance_id: UUID | None
+    document_id: UUID | None
     type: NotificationType
     title: str
     message: str
