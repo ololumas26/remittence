@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import date
 
 from src.model.remittance import RemittanceStatus
+from src.model.payment import PaymentStatus
 
 
 class FilterParams(BaseModel):
@@ -39,3 +40,8 @@ class RemittanceFilterParams(FilterParams):
             raise ValueError("'created_from' não pode ser posterior a 'created_to'")
 
         return self
+
+
+class PaymentFilterParams(FilterParams):
+    client_id: UUID | None = None
+    status: PaymentStatus | None = None

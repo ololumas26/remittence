@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from src.dto.payment_dto import CreatePayment
+from src.dto.filter import PaymentFilterParams
 from abc import ABC, abstractmethod
 from src.service.remittance_service import RemittanceService
 from src.model.payment_method import PaymentMethod
@@ -110,6 +111,18 @@ class PaymentService:
             PaymentMethod.MBWAY: Mbway(self.mbway_gateway),
             PaymentMethod.CARD: CreditDebitCard(),
             PaymentMethod.MULTIBANK: MultibankReference()}
+
+    def get_all(self, filter : PaymentFilterParams):
+        payments = self.payment_repo.get_all(
+            limit=filter.limit,
+            offset=filter.offset,
+            order_by=filter.order_by,
+            client_id=filter.client_id,
+            status=filter.status,
+        )
+        total = self.payment_repo.count(client_id=filter.client_id, status=filter.status)
+
+        return payments, total
 
     def execute_payment(
         self, create_payment : CreatePayment, ip_address: str = ""
