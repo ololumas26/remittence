@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Request, status, UploadFile, Form
 from src.constant.app_constant import APP_PREFIX
-from src.dto.document_dto import CreateDocument, UpdateDocument, DocumentOut
+from src.dto.document_dto import CreateDocument, UpdateDocument, DocumentOut, DocumentFileUrlOut
 from src.controller.dependency import get_document_service, get_current_client
 from src.security.rate_limit import limiter
 from src.service.document_service import DocumentService
@@ -106,6 +106,22 @@ def delete(request : Request, id, client : Client = Depends(get_current_client),
     _ensure_owner(document_service.get_by_id(id), client)
     document_service.delete(id)
     return success_response(data=None)
+
+
+@document_route.get("/{id}/file-url")
+@limiter.limit("30/minute")
+def get_file_url(
+    request : Request,
+    id,
+    document_service : DocumentService = Depends(get_document_service),
+    _ : Role = Depends(require_staff),
+):
+    # Só staff — o próprio cliente já recebe o file_path (bruto) em GET /{id}, dono do seu
+    # próprio documento. Este link assinado é para quem precisa de ver o documento de OUTRA
+    # pessoa (equipa de verificação) sem depender do bucket estar público.
+    expires_in = 300
+    url = document_service.get_signed_url(id, expires_in=expires_in)
+    return success_response(data=DocumentFileUrlOut(url=url, expires_in=expires_in))
 
 
 @document_route.patch("/{id}/approve")

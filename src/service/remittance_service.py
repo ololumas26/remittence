@@ -10,8 +10,8 @@ from src.dto.remittance_dto import CreateRemittance
 from src.dto.filter import RemittanceFilterParams
 from src.model.client import Client
 from src.model.remittance import Remittance, AllowedCoins, RemittanceStatus
-from src.model.document import DocumentType, DocumentStatus
 from src.service.age_calculator import get_current_date, get_18_year_date
+from src.service.kyc_service import KycService
 from src.service.exchange_calculator import calculate_service_fee_amount, calculate_amount_converted
 from src.service.notification_service import NotificationService
 from src.service.remittance_email_template import (
@@ -39,17 +39,12 @@ from uuid import UUID
 logger = logging.getLogger("remittance")
 
 
-# Documentos que servem como identificação pessoal — qualquer um destes, aprovado
-# e ainda válido, conta pra verificação de KYC. O comprovativo de morada é à parte.
-PERSONAL_DOCUMENT_TYPES = (DocumentType.BI, DocumentType.PASSAPORTE, DocumentType.TITULO_RESIDENCIA)
-
-
 class RemittanceService:
 
     def __init__(self, remittance_repository : RemittanceRepository, client_repository : ClientRepository,
                  document_repository : DocumentRepository, recipient_repository : RecipientRepository,
                  geolocation_service : GeolocationService, email_service : EmailService,
-                payment_repository : PaymentRepository):
+                payment_repository : PaymentRepository, kyc_service : KycService | None = None):
         self.remittance_repo = remittance_repository
         self.client_repo = client_repository
         self.document_repo = document_repository
@@ -57,6 +52,10 @@ class RemittanceService:
         self.geolocation_service = geolocation_service
         self.email_service = email_service
         self.payment_repo = payment_repository
+        # Regra "o que conta como documento de identificação válido" vive só em
+        # KycService agora — ver esse ficheiro. Continua opcional aqui para não
+        # obrigar todos os chamadores/testes existentes a passar mais um argumento.
+        self.kyc_service = kyc_service or KycService(document_repository)
 
     def _ensure_client_is_adult(self, client) -> None:
         # ClientService.create/update já bloqueiam data de nascimento <18 anos ao gravar — mas
@@ -71,26 +70,9 @@ class RemittanceService:
 
 
     def _ensure_client_is_verified(self, client_id : UUID) -> None:
-
-            documents = self.document_repo.get_by_client_id(client_id)
-            today = get_current_date()
-
-            has_valid_personal_document = any(
-                document.document_type in PERSONAL_DOCUMENT_TYPES
-                and document.status == DocumentStatus.APPROVED
-                and document.expiration_date >= today
-                for document in documents
-            )
-
-            #TODO: Reativar apenas quando melhorar a questão da submissão do comprovativo de morada
-            # has_valid_address_document = any(
-            #     document.document_type == DocumentType.COMPROVATIVO_MORADA
-            #     and document.status == DocumentStatus.APPROVED
-            #     and document.expiration_date >= today
-            #     for document in documents
-            # )
-
-            if not (has_valid_personal_document):
+            # O que conta como "documento válido" vive em KycService — ver esse
+            # ficheiro (também usado por GET /client/me/kyc-status).
+            if not self.kyc_service.is_verified(client_id):
                 raise ClientNotVerifiedError(
                     "Cliente precisa de ter um documento de identificação e um comprovativo de "
                     "morada aprovados e dentro da validade"

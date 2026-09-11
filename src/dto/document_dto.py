@@ -50,3 +50,11 @@ class DocumentOut(BaseModel):
     file_path: str | None
     created_at: datetime
     updated_at: datetime | None
+
+
+class DocumentFileUrlOut(BaseModel):
+    """Link assinado e de curta duração para o ficheiro de um documento — nunca o file_path
+    em bruto, para não depender da política do bucket no Supabase Storage."""
+
+    url: str
+    expires_in: int

@@ -1,5 +1,6 @@
 from uuid import UUID
 from src.service.document_service import DocumentService
+from src.service.kyc_service import KycService
 from src.service.remittance_service import RemittanceService
 from src.service.recipient_service import RecipientService
 from src.service.client_service import ClientService
@@ -38,6 +39,10 @@ def get_document_service(session : session_DP):
     return DocumentService(SqlDocumentRepository(session), SqlClientRepository(session),file_storage_service)
 
 
+def get_kyc_service(session : session_DP):
+    return KycService(SqlDocumentRepository(session))
+
+
 # Uma única instância partilhada: o Reader do geoip2 abre o ficheiro .mmdb
 # uma vez (lazy, na primeira consulta) e é seguro para reutilizar entre pedidos.
 _geolocation_service = GeolocationService()
@@ -73,6 +78,7 @@ def get_remittance_service(
     session : session_DP,
     geolocation_service : GeolocationService = Depends(get_geolocation_service),
     email_service : EmailService = Depends(get_email_service),
+    kyc_service : KycService = Depends(get_kyc_service),
 ):
     return RemittanceService(
         SqlRemittanceRepository(session),
@@ -81,7 +87,8 @@ def get_remittance_service(
         SqlRecipientRepository(session),
         geolocation_service,
         email_service,
-        SqlPaymentRepository(session)
+        SqlPaymentRepository(session),
+        kyc_service,
     )
 
 
